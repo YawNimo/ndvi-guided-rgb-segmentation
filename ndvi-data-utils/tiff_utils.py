@@ -1,37 +1,32 @@
-from osgeo import gdal
-from osgeo.gdal import Dataset as GDALDataset
 import numpy as np
+import tifffile
 from pathlib import Path
 
-def load_geotiff_image(file_path: Path) -> GDALDataset:
+def tiff_to_numpy_array(file_path: Path) -> np.ndarray:
     """
-    Load a GeoTIFF image using GDAL and return the GDAL Dataset.
+    Read a tiff from disk and convert it to a NumPy array. the array shape will be (height, width, bands).
+    For our data, dtype is uint16.
     """
-    ds: GDALDataset|None = gdal.Open(file_path)
-    if ds is None:
-        raise FileNotFoundError(f"Could not open the file: {file_path}")
-    return ds
 
-def get_shape_of_gdal_dataset(ds: GDALDataset) -> tuple[int, int, int]:
-    """
-    Get the shape of a GDAL Dataset as (bands, rows, cols).
-    """
-    bands = ds.RasterCount
-    cols = ds.RasterXSize
-    rows = ds.RasterYSize
-    return (bands, rows, cols)
-
-def gdaldataset_to_numpy_array(ds: GDALDataset) -> np.ndarray:
-    """
-    Convert a GDAL Dataset to a NumPy array.
-    """
-    bands, rows, cols = get_shape_of_gdal_dataset(ds)
-
-    array: np.ndarray = np.zeros((bands, rows, cols))
-
-    for b in range(1, bands + 1):
-        band = ds.GetRasterBand(b)
-        array[b - 1, :, :] = band.ReadAsArray()
+    array = tifffile.imread(file_path)
 
     return array
+
+def numpy_array_to_tiff(array: np.ndarray, file_path: Path, dtype: str = 'uint16') -> None:
+    """
+    Save a NumPy array as a tiff file to disk.
+    Assumes the array shape is (height, width, bands).
+
+    dtype: data type to save the array as. default is 'uint16'. it really should stay this way because it is very annoying
+    to debug data type issues with tiff files. you think a thing works, and it does,
+    but you cant see the difference because 255 is basically black in uint16
+    """
+
+    if array.ndim != 3:
+        raise ValueError("Input array must be 3D with shape (height, width, bands).")
+
+    if dtype != "uint16":
+        print("Warning: Saving tiff with dtype other than uint16 may lead to unexpected results.")
+
+    tifffile.imwrite(file_path, array.astype(dtype))
 
