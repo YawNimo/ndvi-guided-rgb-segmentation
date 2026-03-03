@@ -1,0 +1,15 @@
+numpy
+pandas
+matplotlib
+scipy
+tqdm
+
+rasterio
+tifffile
+pillow
+
+torch
+torchvision
+segmentation-models-pytorch
+albumentations
+torchmetrics

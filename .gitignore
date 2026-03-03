@@ -1,3 +1,17 @@
-sample_data/
-venv/
+# datasets (local / drive)
+dataset_tiles_512/
+data/
+datasets/
+
+# weights / checkpoints / results
+*.pt
+*.pth
+model_results/
+runs/
+outputs/
+
+# colab / notebook noise
+.ipynb_checkpoints/
+__pycache__/
 *.pyc
+.DS_Store
