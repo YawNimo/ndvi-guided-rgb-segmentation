@@ -43,3 +43,20 @@ ndvi-guided-rgb-segmentation/
 ├── NDVI_NDWI_experimental_full_pipeline.ipynb
 ├── README.md
 └── .gitignore
+
+
+## Running the Pipeline
+
+1. Place dataset in:
+
+dataset_tiles_512/
+    images/
+    masks/
+
+2. Install dependencies:
+
+pip install -r requirements.txt
+
+3. Run model:
+
+python main.py --model spanetfull --ckpt path_to_checkpoint --fixed
