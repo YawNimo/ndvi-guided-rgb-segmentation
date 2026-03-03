@@ -288,7 +288,8 @@ def parse_args():
 
     p.add_argument("--model", type=str, required=True, choices=["unet", "deeplab", "spanetfull"])
     p.add_argument("--ckpt", type=str, required=True, help="Path to *_best.pt checkpoint")
-    p.add_argument("--tiles_base", type=str, default=DEFAULT_TILES_BASE)
+    p.add_argument("--tiles_base", type=str, required=True,
+               help="Path to dataset root containing images/ and masks/")
     p.add_argument("--results_dir", type=str, default=DEFAULT_RESULTS_DIR)
 
     p.add_argument("--fixed", action="store_true", help="Run only fixed tiles visualization + preds")
