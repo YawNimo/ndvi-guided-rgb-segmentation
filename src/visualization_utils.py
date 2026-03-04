@@ -4,6 +4,7 @@ from env_constants import CLASS_COLORS, CLASS_NAMES
 from pathlib import Path
 import numpy as np
 from PIL import Image
+from io_utils import load_gt_mask
 
 def plot_triplets(img_dir, msk_dir, pred_dir, tile_names, out_png=None, title=None, show=False):
     cmap_mask = ListedColormap(CLASS_COLORS)
@@ -14,8 +15,8 @@ def plot_triplets(img_dir, msk_dir, pred_dir, tile_names, out_png=None, title=No
 
     for i, name in enumerate(tile_names):
         img_fp = img_dir / name
-        gt_fp = msk_dir / f"{Path(name).stem}_mask.png"
-        pred_fp = pred_dir / f"{Path(name).stem}_pred.png"
+        gt_fp = msk_dir / f"{Path(name).stem}_mask.png" #TODO: switch to tif once the training pipeline is made
+        pred_fp = pred_dir / f"{Path(name).stem}_pred.png" #TODO: switch to tif once the training pipeline is made
 
         rgb = np.array(Image.open(img_fp).convert("RGB"), dtype=np.uint8)
         gt = load_gt_mask(gt_fp) if gt_fp.exists() else None
@@ -49,7 +50,6 @@ def plot_triplets(img_dir, msk_dir, pred_dir, tile_names, out_png=None, title=No
 
     if title:
         fig.suptitle(title, fontsize=14)
-        plt.subplots_adjust(top=0.95)
 
     if out_png:
         out_png = Path(out_png)
