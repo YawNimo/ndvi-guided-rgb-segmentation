@@ -1,0 +1,5 @@
+to create new requirements.txt on linux:
+pip freeze > requirements.txt
+
+cmd to run to test (for now):
+python src/main.py --model=unet --ckpt=checkpoints/FullUNet_23L_best.pt --make_viz=True --limit=2
