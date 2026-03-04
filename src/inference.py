@@ -1,3 +1,8 @@
+import torch
+from io_utils import load_rgb, save_pred_mask
+import numpy as np
+from pathlib import Path
+
 @torch.no_grad()
 def __predict(model, x, device):
     x = x.to(device, non_blocking=True)
@@ -18,7 +23,7 @@ def inference_loop(tile_names, img_dir, pred_dir, model, device):
         rgb_u8, x = load_rgb(img_fp)
         pred = __predict(model, x, device=device)
 
-        out_fp = pred_dir / f"{Path(name).stem}_pred.png"
+        out_fp = pred_dir / f"{Path(name).stem}_pred.tif"
         save_pred_mask(pred, out_fp)
 
     if missing:
