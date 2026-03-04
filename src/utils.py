@@ -12,9 +12,7 @@ def parse_args():
                help="Path to dataset root containing images/ and masks/")
     p.add_argument("--results_dir", type=str, default=DEFAULT_RESULTS_DIR)
 
-    # TODO probably remove these two
-    p.add_argument("--fixed", action="store_true", help="Run only fixed tiles visualization + preds")
-    p.add_argument("--fixed_tiles", type=str, default="", help="Optional JSON list or comma-separated names")
+    p.add_argument("--make_viz", type=str, default=False, help="Output visualization of predictions (only works on a max of 3 tiles)")
 
     p.add_argument("--limit", type=int, default=0, help="Limit number of images if not fixed (0 = all)")
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
