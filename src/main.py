@@ -5,7 +5,7 @@ from utils import parse_args
 from io_utils import load_checkpoint
 from inference import inference_loop
 from visualization_utils import plot_triplets
-from env_constants import INPUT_IMAGES_SUBDIR, INPUT_MASKS_SUBDIR, INPUT_PRED_MASKS_SUBDIR
+from env_constants import INPUT_IMAGES_SUBDIR, INPUT_MASKS_SUBDIR, OUTPUT_PRED_MASKS_SUBDIR
 
 
 
@@ -19,7 +19,9 @@ if __name__ == "__main__":
     msk_dir = tiles_base / INPUT_MASKS_SUBDIR
 
     results_dir = Path(args.results_dir)
-    pred_dir = results_dir / args.model / INPUT_PRED_MASKS_SUBDIR
+    
+    
+    pred_dir = results_dir / args.model / OUTPUT_PRED_MASKS_SUBDIR
     
     ckpt_path = Path(args.ckpt)
 

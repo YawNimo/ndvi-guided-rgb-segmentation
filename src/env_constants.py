@@ -5,9 +5,9 @@ environmental constants, such as resource directories
 DEFAULT_INPUT_DIR = "input"
 INPUT_IMAGES_SUBDIR = "images"
 INPUT_MASKS_SUBDIR = "masks"
-INPUT_PRED_MASKS_SUBDIR = "pred_masks"
 
 DEFAULT_RESULTS_DIR = "results"
+OUTPUT_PRED_MASKS_SUBDIR = "pred_masks"
 
 DEFAULT_CHECKPOINTS_DIR = "checkpoints" # TODO implement training pipeline
 
