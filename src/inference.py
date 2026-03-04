@@ -23,7 +23,7 @@ def inference_loop(tile_names, img_dir, pred_dir, model, device):
         rgb_u8, x = load_rgb(img_fp)
         pred = __predict(model, x, device=device)
 
-        out_fp = pred_dir / f"{Path(name).stem}_pred.tif"
+        out_fp = pred_dir / f"{Path(name).stem}_pred.png" #TODO: switch to tif once the training pipeline is made
         save_pred_mask(pred, out_fp)
 
     if missing:
