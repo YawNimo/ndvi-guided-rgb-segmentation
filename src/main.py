@@ -25,7 +25,7 @@ if __name__ == "__main__":
     
     ckpt_path = Path(args.ckpt)
 
-    tile_names = sorted([p.name for p in img_dir.glob("*.png")]) #TODO: switch to tif once the training pipeline is made
+    tile_names = sorted([p.name for p in img_dir.glob("*.tif")])
     if args.limit and args.limit > 0:
         tile_names = tile_names[: args.limit]
 

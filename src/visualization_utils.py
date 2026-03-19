@@ -15,8 +15,8 @@ def plot_triplets(img_dir, msk_dir, pred_dir, tile_names, out_png=None, title=No
 
     for i, name in enumerate(tile_names):
         img_fp = img_dir / name
-        gt_fp = msk_dir / f"{Path(name).stem}_mask.png" #TODO: switch to tif once the training pipeline is made
-        pred_fp = pred_dir / f"{Path(name).stem}_pred.png" #TODO: switch to tif once the training pipeline is made
+        gt_fp = msk_dir / f"{Path(name).stem}.tif"
+        pred_fp = pred_dir / f"{Path(name).stem}.tif"
 
         rgb = np.array(Image.open(img_fp).convert("RGB"), dtype=np.uint8)
         gt = load_gt_mask(gt_fp) if gt_fp.exists() else None
