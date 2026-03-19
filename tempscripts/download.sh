@@ -4,8 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 NAMES_FILE="$SCRIPT_DIR/imagenames.txt"
-ZIPS_DIR="$SCRIPT_DIR/input/zips"
-IMAGES_DIR="$SCRIPT_DIR/input/images"
+ZIPS_DIR="$SCRIPT_DIR/../input/zips"
+IMAGES_DIR="$SCRIPT_DIR/../input/images"
 BASE_URL="https://cteco.uconn.edu/download/aerial/2019/tiles/tif"
 
 if [[ ! -f "$NAMES_FILE" ]]; then
