@@ -14,5 +14,5 @@ python training/main.py \
   --plot-predictions \
   --num-workers 0
 
-  cmd to run to test (for now):
+cmd to run to test (for now):
 python src/main.py --model=unet --ckpt=checkpoints/unet_best.pt --make_viz=True --limit=2
