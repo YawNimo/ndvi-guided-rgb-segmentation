@@ -3,16 +3,16 @@ pip freeze > requirements.txt
 
 to train:
 python training/main.py \
-  --model deeplab \
-  --epochs 5 \
+  --model unet \
+  --epochs 20 \
+  --early-stop-patience 8
   --batch-size 1 \
   --amp \
   --freeze-bn \
-  --max-images 50 \
   --plot-loss \
   --plot-metrics \
   --plot-predictions \
   --num-workers 0
 
   cmd to run to test (for now):
-python src/main.py --model=deeplab --ckpt=checkpoints/deeplab_best.pt --make_viz=True --limit=2
+python src/main.py --model=unet --ckpt=checkpoints/unet_best.pt --make_viz=True --limit=2
