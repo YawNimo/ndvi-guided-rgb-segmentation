@@ -731,7 +731,7 @@ def main():
 
 		if PLOT_PREDICTIONS:
 			print("Generating prediction visualizations...")
-			ckpt = torch.load(RESULTS_DIR / f"{MODEL_NAME}_best.pt", map_location=device)
+			ckpt = torch.load(CHECKPOINT_DIR / f"{MODEL_NAME}_best.pt", map_location=device)
 			model.load_state_dict(ckpt)
 			model.to(device)
 			visualize_predictions(
