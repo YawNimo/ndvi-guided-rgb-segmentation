@@ -1,5 +1,18 @@
 to create new requirements.txt on linux:
 pip freeze > requirements.txt
 
-cmd to run to test (for now):
-python src/main.py --model=unet --ckpt=checkpoints/FullUNet_23L_best.pt --make_viz=True --limit=2
+to train:
+python training/main.py \
+  --model deeplab \
+  --epochs 5 \
+  --batch-size 1 \
+  --amp \
+  --freeze-bn \
+  --max-images 50 \
+  --plot-loss \
+  --plot-metrics \
+  --plot-predictions \
+  --num-workers 0
+
+  cmd to run to test (for now):
+python src/main.py --model=deeplab --ckpt=checkpoints/deeplab_best.pt --make_viz=True --limit=2
