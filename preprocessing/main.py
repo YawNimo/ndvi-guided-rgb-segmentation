@@ -1,104 +1,73 @@
-from pathlib import Path
+import argparse
 
-import numpy as np
-import rasterio
-
-
-INPUT_DIR = Path("./input/untiled_images")
-TILE_OUTPUT_DIR = Path("./input/images")
-MASK_OUTPUT_DIR = Path("./input/masks")
-
-NDVI_THRESHOLDS = {
-	0: (-1.0, 0.0),     # water
-	1: (0.0, 0.15),     # impervious
-	2: (0.15, 0.25),    # sparse vegetation
-	3: (0.25, 1.0),     # dense vegetation
-}
-
-MAX_IMAGE_SIZE = 1000  # needed to avoid memory issues when processing large images
+from env_vars import (
+	UNTILED_IMAGES_DIR,
+	TILE_OUTPUT_DIR,
+	MASK_OUTPUT_DIR,
+)
+from utils.download import download_zips
+from utils.unzip import extract_all_zips
+from utils.clean_folders import clean_non_tif, remove_zip_and_untiled_dirs
+from utils.create_tiles import create_tiles
+from utils.create_masks import create_mask
 
 
-def split_into_tiles(image: np.ndarray, tile_size: int) -> list[np.ndarray]:
-	tiles = []
-	for i in range(0, image.shape[0], tile_size):
-		for j in range(0, image.shape[1], tile_size):
-			tile = image[i:i + tile_size, j:j + tile_size]
-			tiles.append(tile)
-	return tiles
+def run_pipeline() -> None:
+	# Download
+	print("Downloading ZIP files...")
+	download_zips(max_downloads=3)
+	
+	# Extract
+	print("Extracting ZIP files...")
+	extract_all_zips()
+	
+	# Create tiles
+	print("Creating tiles...")
+	tile_paths = create_tiles(UNTILED_IMAGES_DIR, TILE_OUTPUT_DIR)
+	print(f"Created {len(tile_paths)} tiles")
+	
+	# Create masks
+	print("Creating masks...")
+	mask_paths = create_mask(TILE_OUTPUT_DIR, MASK_OUTPUT_DIR)
+	print(f"Created {len(mask_paths)} masks")
 
 
-def compute_ndvi(red: np.ndarray, nir: np.ndarray) -> np.ndarray:
-	denominator = red + nir
-	with np.errstate(divide="ignore", invalid="ignore"):
-		ndvi = np.where(denominator == 0, 0.0, (nir - red) / denominator)
-	return ndvi.astype(np.float32)
+def run_cleanup() -> None:
+	print("Running cleanup...")
+	clean_non_tif()
+	remove_zip_and_untiled_dirs()
 
 
-def classify_ndvi(ndvi: np.ndarray) -> np.ndarray:
-	class_mask = np.zeros(ndvi.shape, dtype=np.uint8)
-	threshold_items = list(NDVI_THRESHOLDS.items())
+def parse_args() -> argparse.Namespace:
+	parser = argparse.ArgumentParser(
+		description="Run preprocessing pipeline and/or cleanup."
+	)
+	parser.add_argument(
+		"--run",
+		action="store_true",
+		help="Run non-cleaning steps: download, unzip, tile, and create masks.",
+	)
+	parser.add_argument(
+		"--cleanup",
+		action="store_true",
+		help="Run cleaning steps.",
+	)
+	args = parser.parse_args()
 
-	for index, (class_label, (low, high)) in enumerate(threshold_items):
-		if index == len(threshold_items) - 1:
-			pixels_in_range = (ndvi >= low) & (ndvi <= high)
-		else:
-			pixels_in_range = (ndvi >= low) & (ndvi < high)
-		class_mask[pixels_in_range] = class_label
+	if not args.run and not args.cleanup:
+		parser.error("Pass --run, --cleanup, or both.")
 
-	return class_mask
-
-
-def create_tiles(src_path: Path, dst_dir: Path) -> list[Path]:
-	import tifffile
-
-	dst_dir.mkdir(parents=True, exist_ok=True)
-	tile_paths = []
-
-	image = tifffile.imread(src_path)
-	tiles = split_into_tiles(image, MAX_IMAGE_SIZE)
-
-	for i, tile in enumerate(tiles):
-		tile_name = f"{src_path.stem}_tile_{i}.tif"
-		tile_path = dst_dir / tile_name
-		tifffile.imwrite(tile_path, tile)
-		tile_paths.append(tile_path)
-
-	return tile_paths
-
-
-def process_file(src_path: Path, dst_dir: Path) -> Path:
-	dst_path = dst_dir / src_path.name
-
-	with rasterio.open(src_path) as src:
-		if src.count < 4:
-			raise ValueError(f"Expected at least 4 bands in {src_path}, found {src.count}")
-
-		red = src.read(3).astype(np.float32)
-		nir = src.read(4).astype(np.float32)
-
-		ndvi = compute_ndvi(red, nir)
-		class_mask = classify_ndvi(ndvi)
-
-		profile = src.profile.copy()
-		profile.update(count=1, dtype=rasterio.uint8)
-
-		with rasterio.open(dst_path, "w", **profile) as dst:
-			dst.write(class_mask, 1)
-
-	return dst_path
+	return args
 
 
 def main() -> None:
-	MASK_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-	TILE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+	args = parse_args()
 
-	for tif_path in sorted(INPUT_DIR.glob("*.tif")):
-		dst_paths = create_tiles(tif_path, TILE_OUTPUT_DIR)
-		print(f"Processed {tif_path} into {len(dst_paths)} tiles")
-	
-	for tile_path in TILE_OUTPUT_DIR.glob("*.tif"):
-		mask_path = process_file(tile_path, MASK_OUTPUT_DIR)
-		print(f"Wrote {mask_path}")
+	if args.run:
+		run_pipeline()
+
+	if args.cleanup:
+		run_cleanup()
 
 
 if __name__ == "__main__":
