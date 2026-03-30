@@ -14,6 +14,8 @@ MASK_OUTPUT_DIR = INPUT_PATH / "masks"
 # Processing settings
 MAX_TILE_SIZE = 1000  # to avoid memory issues when processing large images
 
+MAX_DOWNLOADS=5
+
 NDVI_THRESHOLDS = {
 	0: (-1.0, 0.0),     # water
 	1: (0.0, 0.15),     # impervious

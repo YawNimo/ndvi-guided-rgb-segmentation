@@ -2,9 +2,7 @@
 
 from utils.download import download_zips
 from utils.unzip import extract_all_zips
-
-
-MAX_DOWNLOADS=3
+from env_vars import MAX_DOWNLOADS
 
 def download_and_unzip():
 	download_zips(max_downloads=MAX_DOWNLOADS)

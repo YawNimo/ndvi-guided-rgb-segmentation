@@ -4,6 +4,7 @@ from env_vars import (
 	UNTILED_IMAGES_DIR,
 	TILE_OUTPUT_DIR,
 	MASK_OUTPUT_DIR,
+	MAX_DOWNLOADS,
 )
 from utils.download import download_zips
 from utils.unzip import extract_all_zips
@@ -15,7 +16,7 @@ from utils.create_masks import create_mask
 def run_pipeline() -> None:
 	# Download
 	print("Downloading ZIP files...")
-	download_zips(max_downloads=3)
+	download_zips(max_downloads=MAX_DOWNLOADS)
 	
 	# Extract
 	print("Extracting ZIP files...")
