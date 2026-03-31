@@ -1,3 +1,5 @@
+"""Script entrypoint that tiles untiled TIFFs and then creates masks from generated tiles."""
+
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +15,7 @@ from utils.create_masks import create_mask
 
 
 def main() -> None:
+	"""Create tiles from source TIFFs and then generate masks from tile outputs."""
 	MASK_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 	TILE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

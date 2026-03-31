@@ -80,7 +80,6 @@ def convert_masks(input_dir: Path, output_dir: Path, images_dir: Path | None = N
         images_dir = REPO_ROOT / "input" / "images"
     
     tiff_files = sorted(input_dir.glob("*.tif")) + sorted(input_dir.glob("*.tiff"))
-    # tiff_files = [f for f in tiff_files if "885640_se_tile_89.tif" in str(f)] # TEMP: filter just the desired file
     print(f"Found {len(tiff_files)} TIFF mask files in {input_dir}")
 
     if not tiff_files:
@@ -138,6 +137,12 @@ def convert_masks(input_dir: Path, output_dir: Path, images_dir: Path | None = N
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for mask colorization and side-by-side rendering.
+
+    Returns:
+        argparse.Namespace: Parsed paths for input masks, output directory,
+        and optional source image directory.
+    """
     parser = argparse.ArgumentParser(description="Convert class-ID TIFF masks to color PNGs with original images side by side")
     parser.add_argument(
         "--input-dir",
@@ -161,6 +166,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Run CLI conversion flow and return process exit code.
+
+    Returns:
+        int: ``0`` when conversion completes.
+    """
     args = parse_args()
     return convert_masks(args.input_dir, args.output_dir, args.images_dir)
 

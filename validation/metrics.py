@@ -4,6 +4,16 @@ import numpy as np
 
 
 def dice_for_class(gt: np.ndarray, pred: np.ndarray, class_idx: int) -> float:
+    """Compute Dice score for a single class index.
+
+    Args:
+        gt (np.ndarray): Ground-truth class mask.
+        pred (np.ndarray): Predicted class mask.
+        class_idx (int): Target class index.
+
+    Returns:
+        float: Dice score in ``[0, 1]`` for the class.
+    """
     gt_bin = gt == class_idx
     pred_bin = pred == class_idx
 
@@ -20,12 +30,14 @@ def dice_for_class(gt: np.ndarray, pred: np.ndarray, class_idx: int) -> float:
 
 
 def multiclass_dice(gt: np.ndarray, pred: np.ndarray, num_classes: int) -> tuple[float, list[float]]:
+    """Compute per-class Dice and macro-Dice across all classes."""
     class_dice = [dice_for_class(gt, pred, c) for c in range(num_classes)]
     macro = float(np.mean(class_dice))
     return macro, class_dice
 
 
 def confusion_matrix_update(conf_mat: np.ndarray, gt: np.ndarray, pred: np.ndarray, num_classes: int) -> None:
+    """Accumulate one batch of predictions into a confusion matrix."""
     valid = (gt >= 0) & (gt < num_classes)
     gt_flat = gt[valid].reshape(-1)
     pred_flat = pred[valid].reshape(-1)

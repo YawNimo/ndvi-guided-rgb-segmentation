@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Utilities for Gaussian blurring tiled raster images."""
+
 from pathlib import Path
 
 import cv2
@@ -12,6 +14,14 @@ except ImportError:
 
 
 def _to_valid_kernel_size(kernel_value: int) -> int:
+	"""Convert configured kernel value into OpenCV-compatible odd kernel size.
+
+	Args:
+		kernel_value (int): Positive kernel value from preprocessing settings.
+
+	Returns:
+		int: Odd kernel size passed to ``cv2.GaussianBlur``.
+	"""
 	if kernel_value < 1:
 		raise ValueError("GAUSSIAN_KERNEL_VALUE must be >= 1")
 	# OpenCV requires an odd kernel size, so map value=2 to size=5.
@@ -19,6 +29,16 @@ def _to_valid_kernel_size(kernel_value: int) -> int:
 
 
 def blur_images(src_dir: Path, dst_dir: Path, kernel_value: int) -> list[Path]:
+	"""Blur all TIFF files in ``src_dir`` and write results to ``dst_dir``.
+
+	Args:
+		src_dir (Path): Directory containing source ``.tif`` tiles.
+		dst_dir (Path): Directory where blurred tiles are written.
+		kernel_value (int): Blur kernel control value converted to odd size.
+
+	Returns:
+		list[Path]: Output paths of blurred TIFF files.
+	"""
 	dst_dir.mkdir(parents=True, exist_ok=True)
 	blurred_paths: list[Path] = []
 	kernel_size = _to_valid_kernel_size(kernel_value)

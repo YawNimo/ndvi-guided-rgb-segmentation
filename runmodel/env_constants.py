@@ -1,6 +1,4 @@
-"""
-environmental constants, such as resource directories
-"""
+"""Legacy constants module for runmodel-only scripts."""
 
 DEFAULT_INPUT_DIR = "input"
 INPUT_IMAGES_SUBDIR = "images"
@@ -9,7 +7,7 @@ INPUT_MASKS_SUBDIR = "masks"
 DEFAULT_RESULTS_DIR = "results"
 OUTPUT_PRED_MASKS_SUBDIR = "pred_masks"
 
-DEFAULT_CHECKPOINTS_DIR = "checkpoints" # TODO implement training pipeline
+DEFAULT_CHECKPOINTS_DIR = "checkpoints"
 
 
 
@@ -19,7 +17,6 @@ CLASSES = {
     2: "sparse veg",
     3: "dense veg"
 } 
-# TODO: this used to be arrays/lists not dicts, ensure its usage is consistent with the change to dicts
 
 CLASS_NAMES = [CLASSES[i] for i in range(len(CLASSES))]
 

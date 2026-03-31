@@ -1,3 +1,5 @@
+"""Legacy local model factory used by runmodel scripts."""
+
 import torch.nn as nn
 import torchvision
 from torchvision.models.segmentation import deeplabv3_resnet50
@@ -6,6 +8,16 @@ from SPANetFull import SPANetFull
 from torchvision.models import ResNet50_Weights
 
 def build_unet(num_classes=4, encoder_name="resnet34", encoder_weights="imagenet"):
+    """Construct a U-Net segmentation model.
+
+    Args:
+        num_classes (int): Number of output classes.
+        encoder_name (str): SMP encoder name.
+        encoder_weights (str): Encoder weight spec.
+
+    Returns:
+        nn.Module: Configured U-Net model.
+    """
     model = smp.Unet(
         encoder_name=encoder_name,
         encoder_weights=encoder_weights,
@@ -17,6 +29,7 @@ def build_unet(num_classes=4, encoder_name="resnet34", encoder_weights="imagenet
 
 
 def build_deeplab(num_classes=4):
+    """Construct DeepLabV3-ResNet50 and replace logits heads for class count."""
     model = deeplabv3_resnet50(
         weights=torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.DEFAULT
     )
@@ -32,6 +45,17 @@ def build_deeplab(num_classes=4):
     return model
 
 def build_model(name: str, num_classes=4, unet_encoder="resnet34", unet_weights="imagenet"):
+    """Build one supported model by name.
+
+    Args:
+        name (str): One of ``unet``, ``deeplab``, or ``spanetfull``.
+        num_classes (int): Number of output classes.
+        unet_encoder (str): U-Net encoder name.
+        unet_weights (str): U-Net encoder weights.
+
+    Returns:
+        nn.Module: Instantiated segmentation model.
+    """
     name = name.lower()
     if name == "unet":
         return build_unet(num_classes=num_classes, encoder_name=unet_encoder, encoder_weights=unet_weights)

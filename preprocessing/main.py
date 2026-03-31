@@ -1,3 +1,5 @@
+"""CLI entrypoint for preprocessing pipeline stages."""
+
 import argparse
 
 from env_vars import (
@@ -17,6 +19,7 @@ from utils.create_masks import create_mask
 
 
 def download() -> None:
+	"""Download ZIP archives from CSV links and extract them."""
 	print("Downloading ZIP files...")
 	download_zips(max_downloads=MAX_DOWNLOADS)
 	print("Extracting ZIP files...")
@@ -24,30 +27,39 @@ def download() -> None:
 
 
 def tile() -> None:
+	"""Create fixed-size TIFF tiles from untiled source imagery."""
 	print("Creating tiles...")
 	tile_paths = create_tiles(UNTILED_IMAGES_DIR, TILE_OUTPUT_DIR)
 	print(f"Created {len(tile_paths)} tiles")
 
 
 def blur() -> None:
+	"""Apply Gaussian blur to each generated tile."""
 	print("Blurring images...")
 	blurred_paths = blur_images(TILE_OUTPUT_DIR, BLURRED_IMAGES_DIR, GAUSSIAN_KERNEL_VALUE)
 	print(f"Created {len(blurred_paths)} blurred images")
 
 
 def mask() -> None:
+	"""Generate class-index masks from blurred image tiles."""
 	print("Creating masks...")
 	mask_paths = create_mask(BLURRED_IMAGES_DIR, MASK_OUTPUT_DIR)
 	print(f"Created {len(mask_paths)} masks")
 
 
 def run_cleanup() -> None:
+	"""Remove non-TIF artifacts and optional temporary directories."""
 	print("Running cleanup...")
 	clean_non_tif()
 	remove_zip_and_untiled_dirs()
 
 
 def parse_args() -> argparse.Namespace:
+	"""Parse and validate CLI flags for pipeline stage execution.
+
+	Returns:
+		argparse.Namespace: Parsed flags for each pipeline stage.
+	"""
 	parser = argparse.ArgumentParser(
 		description="Run preprocessing pipeline steps individually or in sequence."
 	)
@@ -85,6 +97,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+	"""Run selected preprocessing stages in fixed pipeline order."""
 	args = parse_args()
 
 	# Execute steps in fixed order regardless of argument order

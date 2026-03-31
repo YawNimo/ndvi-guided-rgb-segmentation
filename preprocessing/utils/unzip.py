@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""ZIP extraction helpers for preprocessing source data."""
+
 import sys
 import zipfile
 from pathlib import Path
@@ -13,6 +15,7 @@ ZIPS_DIR = INPUT_PATH / "zips"
 
 
 def extract_all_zips():
+    """Extract every ZIP file from ``input/zips`` into untiled imagery directory."""
     # Create output directory if it doesn't exist
     UNTILED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     

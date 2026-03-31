@@ -1,10 +1,19 @@
+"""Legacy ResNet-50 encoder wrapper for runmodel-local SPANet."""
+
 import torch.nn as nn
 import torchvision
 from torchvision.models import ResNet50_Weights
 
 
 class ResNet50Encoder(nn.Module):
+    """Expose low/high intermediate feature maps from ResNet-50."""
+
     def __init__(self, pretrained=True):
+        """Initialize backbone layers.
+
+        Args:
+            pretrained (bool): Use ImageNet pretrained weights when true.
+        """
         super().__init__()
         weights = ResNet50_Weights.DEFAULT if pretrained else None
         base = torchvision.models.resnet50(weights=weights)
@@ -21,6 +30,7 @@ class ResNet50Encoder(nn.Module):
         self.layer4 = base.layer4  # high
 
     def forward(self, x):
+        """Encode input tensor and return low/high feature maps."""
         x = self.stem(x)
         x = self.layer1(x)
         low = self.layer2(x)

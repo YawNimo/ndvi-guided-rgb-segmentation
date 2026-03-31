@@ -1,7 +1,18 @@
+"""Legacy SPAM attention block for runmodel-local SPANet implementation."""
+
 import torch.nn as nn
 
 class SPAMBlock(nn.Module):
+    """Apply multi-scale pooled attention to feature maps."""
+
     def __init__(self, in_channels, pool_sizes=(1, 2, 4), reduction=4):
+        """Initialize SPAM block parameters.
+
+        Args:
+            in_channels (int): Input feature channels.
+            pool_sizes (tuple[int, ...]): Adaptive pooling scales.
+            reduction (int): Channel reduction factor.
+        """
         super().__init__()
         self.pool_sizes = pool_sizes
         mid_channels = max(in_channels // reduction, 1)
@@ -14,6 +25,7 @@ class SPAMBlock(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
+        """Compute attention map from pooled context and apply to input tensor."""
         B, C, H, W = x.shape
         pooled_list = []
         for ps in self.pool_sizes:

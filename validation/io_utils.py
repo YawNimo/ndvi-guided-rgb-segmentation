@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""I/O helpers for pairing masks and writing validation reports."""
+
 from dataclasses import dataclass
 from pathlib import Path
 import csv
@@ -10,6 +12,8 @@ from PIL import Image
 
 @dataclass
 class PairingResult:
+    """Matched pair of ground-truth and prediction masks for one tile."""
+
     tile_id: str
     gt_path: Path
     pred_path: Path
@@ -17,15 +21,19 @@ class PairingResult:
 
 @dataclass
 class SkippedItem:
+    """Tile entry excluded from scoring with an explicit reason."""
+
     tile_id: str
     reason: str
 
 
 def _tif_files(directory: Path) -> list[Path]:
+    """Return sorted TIFF files within a directory."""
     return sorted([p for p in directory.glob("*.tif") if p.is_file()])
 
 
 def _build_lookup(files: list[Path]) -> dict[str, Path]:
+    """Build filename-stem lookup and normalize optional ``_mask`` suffix."""
     lookup: dict[str, Path] = {}
     for fp in files:
         stem = fp.stem
@@ -36,6 +44,15 @@ def _build_lookup(files: list[Path]) -> dict[str, Path]:
 
 
 def pair_ground_truth_and_predictions(gt_dir: Path, pred_dir: Path) -> tuple[list[PairingResult], list[SkippedItem]]:
+    """Match GT and prediction TIFF files by tile stem.
+
+    Args:
+        gt_dir (Path): Directory containing ground-truth masks.
+        pred_dir (Path): Directory containing prediction masks.
+
+    Returns:
+        tuple[list[PairingResult], list[SkippedItem]]: Paired items and skipped items.
+    """
     gt_files = _tif_files(gt_dir)
     pred_files = _tif_files(pred_dir)
 
@@ -62,6 +79,7 @@ def pair_ground_truth_and_predictions(gt_dir: Path, pred_dir: Path) -> tuple[lis
 
 
 def load_mask(mask_path: Path) -> np.ndarray:
+    """Load a mask image as a 2D ``uint8`` numpy array."""
     arr = np.array(Image.open(mask_path), dtype=np.uint8)
     if arr.ndim == 3:
         arr = arr[..., 0]
@@ -76,6 +94,7 @@ def write_validation_csv(
     summary_rows: list[dict[str, str]],
     skipped_rows: list[dict[str, str]],
 ) -> None:
+    """Write validation rows, summary rows, and skipped rows to CSV."""
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "tile_id",

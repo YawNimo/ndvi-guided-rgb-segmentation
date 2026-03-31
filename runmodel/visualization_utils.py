@@ -1,3 +1,5 @@
+"""Visualization helpers for side-by-side RGB, ground truth, and prediction panels."""
+
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from common.constants import CLASS_COLORS, CLASS_NAMES
@@ -7,6 +9,20 @@ from PIL import Image
 from common.io_utils import load_gt_mask
 
 def plot_triplets(img_dir, msk_dir, pred_dir, tile_names, out_png=None, title=None, show=False):
+    """Plot RGB, ground-truth, and prediction triplets for a list of tiles.
+
+    Args:
+        img_dir (Path): Directory with RGB tiles.
+        msk_dir (Path): Directory with ground-truth masks.
+        pred_dir (Path): Directory with predicted masks.
+        tile_names (list[str]): Tile filenames to visualize.
+        out_png (Path | None): Optional output image path.
+        title (str | None): Optional plot title.
+        show (bool): Whether to display interactively.
+
+    Returns:
+        None: Renders and optionally saves the figure.
+    """
     cmap_mask = ListedColormap(CLASS_COLORS)
     norm_mask = BoundaryNorm([-0.5, 0.5, 1.5, 2.5, 3.5], cmap_mask.N)
 

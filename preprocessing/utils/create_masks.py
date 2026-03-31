@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Mask creation utilities based on NDVI and NDWI thresholds."""
+
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +19,15 @@ except ImportError:
 
 
 def compute_ndwi(green: np.ndarray, nir: np.ndarray) -> np.ndarray:
+	"""Compute NDWI values from green and NIR bands.
+
+	Args:
+		green (np.ndarray): Green band array.
+		nir (np.ndarray): Near-infrared band array.
+
+	Returns:
+		np.ndarray: NDWI array as ``float32``.
+	"""
 	denominator = green + nir
 	with np.errstate(divide="ignore", invalid="ignore"):
 		ndwi = np.where(denominator == 0, 0.0, (green - nir) / denominator)
@@ -24,6 +35,15 @@ def compute_ndwi(green: np.ndarray, nir: np.ndarray) -> np.ndarray:
 
 
 def compute_ndvi(red: np.ndarray, nir: np.ndarray) -> np.ndarray:
+	"""Compute NDVI values from red and NIR bands.
+
+	Args:
+		red (np.ndarray): Red band array.
+		nir (np.ndarray): Near-infrared band array.
+
+	Returns:
+		np.ndarray: NDVI array as ``float32``.
+	"""
 	denominator = red + nir
 	with np.errstate(divide="ignore", invalid="ignore"):
 		ndvi = np.where(denominator == 0, 0.0, (nir - red) / denominator)
@@ -31,6 +51,19 @@ def compute_ndvi(red: np.ndarray, nir: np.ndarray) -> np.ndarray:
 
 
 def classify_hybrid_ndvi_ndwi(ndvi: np.ndarray, ndwi: np.ndarray) -> np.ndarray:
+	"""Classify pixels into water/impervious/vegetation classes.
+
+	Args:
+		ndvi (np.ndarray): NDVI array.
+		ndwi (np.ndarray): NDWI array.
+
+	Returns:
+		np.ndarray: ``uint8`` class-index mask.
+
+	Usage:
+		Class ``0`` is assigned for water by NDWI thresholding, class ``1`` for
+		non-water low-NDVI pixels, and vegetation classes from NDVI ranges.
+	"""
 	class_mask = np.full(ndvi.shape, 1, dtype=np.uint8)
 
 	# NDWI disambiguates non-vegetation pixels: water (0) vs impervious (1).
@@ -49,6 +82,15 @@ def classify_hybrid_ndvi_ndwi(ndvi: np.ndarray, ndwi: np.ndarray) -> np.ndarray:
 
 
 def create_mask(src_dir: Path, dst_dir: Path) -> list[Path]:
+	"""Create segmentation masks for all TIFF files in a directory.
+
+	Args:
+		src_dir (Path): Input directory with multispectral TIFF tiles.
+		dst_dir (Path): Output directory for class-index mask TIFF files.
+
+	Returns:
+		list[Path]: Written mask file paths.
+	"""
 	dst_dir.mkdir(parents=True, exist_ok=True)
 	mask_paths = []
 

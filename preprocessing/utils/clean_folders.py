@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Folder cleanup utilities for preprocessing artifacts."""
+
 import shutil
 import sys
 
@@ -13,6 +15,7 @@ ZIPS_DIR = INPUT_PATH / "zips"
 
 
 def clean_non_tif():
+    """Remove non-TIFF files from untiled and blurred image directories."""
     for folder in (UNTILED_IMAGES_DIR, BLURRED_IMAGES_DIR):
         if not folder.exists():
             print(f"Skipping missing folder: {folder}")
@@ -28,6 +31,7 @@ def clean_non_tif():
 
 
 def remove_zip_and_untiled_dirs():
+    """Remove ZIP and intermediate source directories created during preprocessing."""
     for folder in (ZIPS_DIR, UNTILED_IMAGES_DIR, BLURRED_IMAGES_DIR):
         if folder.exists():
             print(f"Removing folder: {folder}")

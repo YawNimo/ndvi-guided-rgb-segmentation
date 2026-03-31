@@ -1,3 +1,5 @@
+"""Inference entrypoint for generating predicted masks from trained checkpoints."""
+
 import sys
 import torch
 from pathlib import Path
@@ -17,6 +19,7 @@ from common.constants import INPUT_IMAGES_SUBDIR, INPUT_MASKS_SUBDIR, OUTPUT_PRE
 
 
 if __name__ == "__main__":    
+    # Parse CLI arguments, run inference, and optionally render triplet plots.
     args = parse_args()
     device = torch.device(args.device)
 
@@ -56,7 +59,7 @@ if __name__ == "__main__":
 
     # Visualization (only works up to a max of 3 tiles)
     if args.make_viz and len(tile_names) <= 3:
-        # TODO: move this to some visualization.py
+        # Generate a fixed side-by-side preview when a small tile set is used.
         viz_fp = results_dir / args.model / "fixed_viz.png"
         plot_triplets(
             img_dir=img_dir,

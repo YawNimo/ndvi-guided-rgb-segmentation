@@ -75,8 +75,9 @@ MAX_IMAGES = None
 def parse_args():
 	"""
 	Parse command-line arguments to override default configuration.
-	
-	An example is in notes.txt
+
+	Returns:
+		argparse.Namespace: Parsed and validated training configuration.
 	"""
 	parser = argparse.ArgumentParser(
 		description="Train semantic segmentation models on pre-tiled RGB/mask PNG pairs."
@@ -131,6 +132,7 @@ def parse_args():
 
 
 def set_seed(seed: int = 42):
+	"""Set deterministic random seeds for Python, NumPy, and PyTorch."""
 	random.seed(seed)
 	np.random.seed(seed)
 	torch.manual_seed(seed)
@@ -141,8 +143,15 @@ def set_seed(seed: int = 42):
 
 
 def _simple_train_augment(image: torch.Tensor, mask: torch.Tensor):
-	"""Lightweight geometric augmentation without external dependencies."""
-	# todo better data augmentation pipeline with albumentations or similar library
+	"""Apply random flips and 90-degree rotations to an image/mask pair.
+
+	Args:
+		image (torch.Tensor): Input image tensor of shape ``(3, H, W)``.
+		mask (torch.Tensor): Class-index mask tensor of shape ``(H, W)``.
+
+	Returns:
+		tuple[torch.Tensor, torch.Tensor]: Augmented image and mask tensors.
+	"""
 	if random.random() < 0.5:
 		image = torch.flip(image, dims=[2])
 		mask = torch.flip(mask, dims=[1])
@@ -167,14 +176,23 @@ class TileSegDataset(Dataset):
 	"""
 
 	def __init__(self, pairs, indices, train=False):
+		"""Initialize dataset with paired paths and a split index view.
+
+		Args:
+			pairs (list[tuple[Path, Path]]): Image/mask path pairs.
+			indices (list[int]): Subset indices into ``pairs``.
+			train (bool): Whether to apply training augmentations.
+		"""
 		self.pairs = pairs
 		self.indices = indices
 		self.train = train
 
 	def __len__(self):
+		"""Return number of samples in this split."""
 		return len(self.indices)
 
 	def __getitem__(self, i):
+		"""Load one image/mask pair and return tensorized sample."""
 		img_fp, msk_fp = self.pairs[self.indices[i]]
 
 		image = np.array(Image.open(img_fp).convert("RGB"), dtype=np.uint8)
@@ -198,11 +216,13 @@ def _list_supported_images(directory: Path):
 
 
 def _mask_stem_candidates(image_stem: str):
+	"""Return accepted mask-stem variants for a given image stem."""
 	# given `image_001.tif`, the mask names accepted would be `image_001_mask.tif` or `image_001.tif`
 	return [f"{image_stem}_mask", image_stem]
 
 
 def _build_mask_lookup(mask_files):
+	"""Build filename-stem lookup with optional `_mask` normalization."""
 	lookup = {}
 	for m in mask_files:
 		stem = m.stem
@@ -213,6 +233,11 @@ def _build_mask_lookup(mask_files):
 
 
 def create_data_split():
+	"""Create train/val/test index splits from discovered image-mask pairs.
+
+	Returns:
+		tuple: ``(pairs, train_idx, val_idx, test_idx)``.
+	"""
 	assert IMG_DIR.exists(), f"Missing image dir: {IMG_DIR}"
 	assert MSK_DIR.exists(), f"Missing mask dir: {MSK_DIR}"
 
@@ -271,6 +296,7 @@ def create_data_split():
 
 
 def create_dataloaders(pairs, train_idx, val_idx, test_idx):
+	"""Build train/validation/test dataloaders from split indices."""
 	train_ds = TileSegDataset(pairs, train_idx, train=True)
 	val_ds = TileSegDataset(pairs, val_idx, train=False)
 	test_ds = TileSegDataset(pairs, test_idx, train=False)
@@ -301,6 +327,11 @@ def create_dataloaders(pairs, train_idx, val_idx, test_idx):
 
 
 def compute_class_weights():
+	"""Compute inverse-frequency class weights from all mask pixels.
+
+	Returns:
+		torch.Tensor: Per-class loss weights as float tensor.
+	"""
 	mask_files = _list_supported_images(MSK_DIR)
 	assert mask_files, f"No mask files found in {MSK_DIR}"
 
@@ -328,6 +359,7 @@ def compute_class_weights():
 
 
 def dice_loss(logits, targets, num_classes=NUM_CLASSES, eps=1e-6):
+	"""Compute mean soft Dice loss over all classes."""
 	probs = F.softmax(logits, dim=1)
 	targets_oh = F.one_hot(targets, num_classes).permute(0, 3, 1, 2).float()
 
@@ -340,6 +372,7 @@ def dice_loss(logits, targets, num_classes=NUM_CLASSES, eps=1e-6):
 
 
 def make_combined_loss(class_weights_tensor, device):
+	"""Create combined CE + Dice loss function closure."""
 	ce_loss = nn.CrossEntropyLoss(weight=class_weights_tensor.to(device))
 
 	def combined_loss(logits, targets):
@@ -349,10 +382,12 @@ def make_combined_loss(class_weights_tensor, device):
 
 
 def _safe_div(num, den):
+	"""Safely divide two scalars and return 0.0 when denominator is zero."""
 	return num / den if den > 0 else 0.0
 
 
 def freeze_batchnorm_layers(model):
+	"""Freeze all BatchNorm layers in a model in eval mode."""
 	for m in model.modules():
 		if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.SyncBatchNorm)):
 			m.eval()
@@ -362,6 +397,7 @@ def freeze_batchnorm_layers(model):
 
 @torch.no_grad()
 def compute_segmentation_metrics(conf_mat: torch.Tensor):
+	"""Compute macro and per-class segmentation metrics from confusion matrix."""
 	tp = conf_mat.diag().float()
 	pred_sum = conf_mat.sum(dim=0).float()
 	true_sum = conf_mat.sum(dim=1).float()
@@ -391,6 +427,7 @@ def compute_segmentation_metrics(conf_mat: torch.Tensor):
 
 
 def _update_confusion_matrix(conf_mat, preds, targets, num_classes=NUM_CLASSES):
+	"""Accumulate predictions/targets into a confusion matrix tensor."""
 	with torch.no_grad():
 		mask = (targets >= 0) & (targets < num_classes)
 		t = targets[mask].view(-1)
@@ -414,6 +451,11 @@ def run_one_epoch(
 	total_epochs=1,
 	model_name="model",
 ):
+	"""Run one training or validation epoch.
+
+	Returns:
+		tuple[float, dict, float]: Average loss, metrics dict, and elapsed seconds.
+	"""
 	if train:
 		model.train()
 		if freeze_bn:
@@ -497,6 +539,11 @@ def train_model(
 	grad_accum_steps=GRAD_ACCUM_STEPS,
 	freeze_bn=FREEZE_BN,
 ):
+	"""Train model with validation tracking, checkpointing, and early stopping.
+
+	Returns:
+		tuple[dict, list[dict]]: Best checkpoint metadata and full training history.
+	"""
 	CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 	RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -606,6 +653,7 @@ def train_model(
 
 
 def print_model_info(model, name):
+	"""Print total and trainable parameter counts for a model."""
 	total = sum(p.numel() for p in model.parameters())
 	trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
 	print(f"Model: {name}")
@@ -613,6 +661,7 @@ def print_model_info(model, name):
 
 
 def main():
+	"""Parse runtime config, train selected model, and optionally generate plots."""
 	global SEED, MODEL_NAME
 	global EPOCHS, BATCH_SIZE, LEARNING_RATE, WEIGHT_DECAY, EARLY_STOP_PATIENCE
 	global TRAIN_RATIO, VAL_RATIO

@@ -1,3 +1,5 @@
+"""Legacy SPANetFull model definition used by runmodel-local imports."""
+
 import torch.nn as nn
 from ResNet50Encoder import ResNet50Encoder
 from SPAMBlock import SPAMBlock
@@ -5,7 +7,15 @@ from FeatureFusionModule import FeatureFusionModule
 
 
 class SPANetFull(nn.Module):
+    """SPANet architecture combining encoder, attention blocks, and decoder."""
+
     def __init__(self, num_classes=4, pretrained_backbone=True):
+        """Initialize SPANetFull model.
+
+        Args:
+            num_classes (int): Output class count.
+            pretrained_backbone (bool): Whether to use pretrained encoder weights.
+        """
         super().__init__()
         self.encoder = ResNet50Encoder(pretrained=pretrained_backbone)
 
@@ -24,6 +34,7 @@ class SPANetFull(nn.Module):
         self.classifier = nn.Conv2d(128, num_classes, kernel_size=1)
 
     def forward(self, x):
+        """Return segmentation logits at input spatial resolution."""
         H, W = x.shape[-2:]
         low, high = self.encoder(x)
 

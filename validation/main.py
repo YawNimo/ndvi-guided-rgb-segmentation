@@ -35,6 +35,11 @@ from validation.visualization import (  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
+	"""Parse CLI options for validation and visualization outputs.
+
+	Returns:
+		argparse.Namespace: Validation runtime configuration.
+	"""
 	parser = argparse.ArgumentParser(description="Validate predicted masks against ground truth masks with Dice metrics.")
 	parser.add_argument("--model", type=str, required=True, help="Model name under results/<model>/")
 	parser.add_argument("--input_base", type=str, default=DEFAULT_INPUT_DIR, help="Input root containing images/ and masks/")
@@ -50,6 +55,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _ensure_required_dirs(gt_dir: Path, pred_dir: Path, img_dir: Path) -> None:
+	"""Validate required directories and warn when RGB folder is unavailable."""
 	if not gt_dir.exists():
 		raise FileNotFoundError(f"Ground-truth directory not found: {gt_dir}")
 	if not pred_dir.exists():
@@ -59,6 +65,7 @@ def _ensure_required_dirs(gt_dir: Path, pred_dir: Path, img_dir: Path) -> None:
 
 
 def _validate_mask_values(mask: np.ndarray, num_classes: int, label: str, tile_id: str) -> None:
+	"""Ensure a mask contains only valid class indices."""
 	min_v = int(mask.min())
 	max_v = int(mask.max())
 	if min_v < 0 or max_v >= num_classes:
@@ -73,6 +80,7 @@ def _summary_rows(
 	macro_scores: list[float],
 	per_class_scores: list[list[float]],
 ) -> list[dict[str, str]]:
+	"""Build aggregate CSV rows for validation metrics output."""
 	mean_macro = float(np.mean(macro_scores)) if macro_scores else 0.0
 	class_means = [float(np.mean(col)) if col else 0.0 for col in per_class_scores]
 
@@ -93,12 +101,14 @@ def _summary_rows(
 
 
 def _select_triplet_samples(rows: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
+	"""Select lowest macro-Dice tiles for triplet visualization."""
 	ok_rows = [r for r in rows if r.get("status") == "ok"]
 	ok_rows.sort(key=lambda r: float(r["macro_dice"]))
 	return ok_rows[: max(0, limit)]
 
 
 def main() -> None:
+	"""Run full validation workflow and save metric visualizations."""
 	args = parse_args()
 
 	input_base = Path(args.input_base)

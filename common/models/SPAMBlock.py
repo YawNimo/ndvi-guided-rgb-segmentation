@@ -1,10 +1,21 @@
+"""Spatial pyramid attention module used in SPANetFull."""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class SPAMBlock(nn.Module):
+    """Apply multi-scale pooled attention to an input feature map."""
+
     def __init__(self, in_channels, pool_sizes=(1, 2, 4), reduction=4):
+        """Initialize the SPAM block.
+
+        Args:
+            in_channels (int): Number of channels in the input tensor.
+            pool_sizes (tuple[int, ...]): Pyramid pooling output sizes.
+            reduction (int): Reduction factor for the bottleneck channels.
+        """
         super().__init__()
         self.pool_sizes = pool_sizes
         mid_channels = max(in_channels // reduction, 1)
@@ -17,6 +28,14 @@ class SPAMBlock(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
+        """Compute and apply spatial attention from pooled multi-scale context.
+
+        Args:
+            x (torch.Tensor): Input tensor with shape ``(N, C, H, W)``.
+
+        Returns:
+            torch.Tensor: Attention-weighted tensor with shape ``(N, C, H, W)``.
+        """
         _, _, h, w = x.shape
         pooled_list = []
         for ps in self.pool_sizes:

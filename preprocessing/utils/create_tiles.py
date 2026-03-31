@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Image tiling utilities for preprocessing TIFF inputs."""
+
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +13,15 @@ except ImportError:
 
 
 def split_into_tiles(image: np.ndarray, tile_size: int) -> list[np.ndarray]:
+	"""Split an image array into row-major tiles of up to ``tile_size``.
+
+	Args:
+		image (np.ndarray): Source image array.
+		tile_size (int): Tile width/height in pixels.
+
+	Returns:
+		list[np.ndarray]: Extracted tiles in row-major order.
+	"""
 	tiles = []
 	for i in range(0, image.shape[0], tile_size):
 		for j in range(0, image.shape[1], tile_size):
@@ -20,6 +31,15 @@ def split_into_tiles(image: np.ndarray, tile_size: int) -> list[np.ndarray]:
 
 
 def create_tiles(src_dir: Path, dst_dir: Path) -> list[Path]:
+	"""Create TIFF tiles for each source TIFF in a directory.
+
+	Args:
+		src_dir (Path): Directory containing source TIFF files.
+		dst_dir (Path): Directory where tiles are written.
+
+	Returns:
+		list[Path]: Paths of generated tile files.
+	"""
 	import tifffile
 
 	dst_dir.mkdir(parents=True, exist_ok=True)

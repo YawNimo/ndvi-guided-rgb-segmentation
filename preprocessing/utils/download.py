@@ -1,3 +1,5 @@
+"""Download utilities for retrieving imagery ZIP archives from CSV URLs."""
+
 import csv
 from pathlib import Path
 from urllib.parse import urlparse
@@ -20,6 +22,7 @@ ZIPS_DIR = INPUT_PATH / "zips"
 
 
 def _iter_zip_urls(csv_path: Path, column_name: str):
+    """Yield valid ZIP URLs from a configured CSV column."""
     with csv_path.open("r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         if not reader.fieldnames or column_name not in reader.fieldnames:
@@ -40,12 +43,14 @@ def _iter_zip_urls(csv_path: Path, column_name: str):
 
 
 def _filename_from_url(url: str) -> str:
+    """Extract a destination filename from a URL path."""
     path = urlparse(url).path
     name = Path(path).name
     return name or "download.zip"
 
 
 def _print_progress(file_label: str, downloaded_bytes: int, total_bytes: int):
+    """Print terminal progress status for a single download."""
     downloaded_mb = downloaded_bytes / BYTES_PER_MB
 
     if total_bytes > 0:
@@ -67,6 +72,7 @@ def _print_progress(file_label: str, downloaded_bytes: int, total_bytes: int):
 
 
 def _download_file(url: str, destination: Path, file_label: str):
+    """Download one URL to a destination path with progress output."""
     with urlopen(url) as response, destination.open("wb") as out_file:
         content_length = response.headers.get("Content-Length")
         total_bytes = int(content_length) if content_length and content_length.isdigit() else 0
@@ -85,6 +91,14 @@ def _download_file(url: str, destination: Path, file_label: str):
 
 
 def download_zips(max_downloads=3):
+    """Download ZIP files listed in the preprocessing CSV.
+
+    Args:
+        max_downloads (int): Maximum number of unique ZIP URLs to download.
+
+    Returns:
+        None: Files are written under ``input/zips`` as a side effect.
+    """
     ZIPS_DIR.mkdir(parents=True, exist_ok=True)
 
     if not CSV_PATH.exists():

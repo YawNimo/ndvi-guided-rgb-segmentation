@@ -1,3 +1,5 @@
+"""Full SPANet architecture for RGB semantic segmentation."""
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -7,7 +9,15 @@ from .SPAMBlock import SPAMBlock
 
 
 class SPANetFull(nn.Module):
+    """SPANet model composed of ResNet encoder, SPAM blocks, and a decoder head."""
+
     def __init__(self, num_classes=4, pretrained_backbone=True):
+        """Initialize SPANetFull.
+
+        Args:
+            num_classes (int): Number of segmentation classes.
+            pretrained_backbone (bool): Whether to use pretrained ResNet-50 weights.
+        """
         super().__init__()
         self.encoder = ResNet50Encoder(pretrained=pretrained_backbone)
 
@@ -26,6 +36,14 @@ class SPANetFull(nn.Module):
         self.classifier = nn.Conv2d(128, num_classes, kernel_size=1)
 
     def forward(self, x):
+        """Run forward pass and return class logits at input resolution.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape ``(N, 3, H, W)``.
+
+        Returns:
+            torch.Tensor: Logits tensor of shape ``(N, num_classes, H, W)``.
+        """
         h, w = x.shape[-2:]
         low, high = self.encoder(x)
 

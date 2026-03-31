@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Plotting utilities for validation metrics and qualitative samples."""
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -17,6 +19,7 @@ def plot_triplets(
     class_colors: list[str],
     title: str,
 ) -> None:
+    """Save RGB/GT/prediction triplet panels for selected tiles."""
     if not image_paths:
         return
 
@@ -55,6 +58,7 @@ def plot_triplets(
 
 
 def plot_dice_histogram(out_png: Path, macro_dice_scores: list[float]) -> None:
+    """Save histogram plot for per-tile macro Dice scores."""
     if not macro_dice_scores:
         return
 
@@ -77,6 +81,7 @@ def plot_confusion_matrix(
     class_names: list[str],
     normalize: bool = True,
 ) -> None:
+    """Save confusion matrix heatmap, optionally row-normalized."""
     data = conf_mat.astype(np.float64)
     if normalize:
         row_sums = data.sum(axis=1, keepdims=True)
@@ -110,6 +115,7 @@ def plot_per_class_dice(
     class_names: list[str],
     class_dice_scores: list[float],
 ) -> None:
+    """Save bar chart of mean Dice scores per class."""
     if not class_dice_scores:
         return
 
