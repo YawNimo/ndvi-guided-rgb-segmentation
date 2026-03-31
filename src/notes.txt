@@ -1,0 +1,2 @@
+cmd to run to test (for now):
+python src/main.py --model=unet --ckpt=checkpoints/unet_best.pt --make_viz=True --limit=3

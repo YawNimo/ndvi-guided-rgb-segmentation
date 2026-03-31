@@ -1,18 +1,2 @@
 to create new requirements.txt on linux:
 pip freeze > requirements.txt
-
-to train:
-python training/main.py \
-  --model unet \
-  --epochs 20 \
-  --early-stop-patience 8
-  --batch-size 1 \
-  --amp \
-  --freeze-bn \
-  --plot-loss \
-  --plot-metrics \
-  --plot-predictions \
-  --num-workers 0
-
-cmd to run to test (for now):
-python src/main.py --model=unet --ckpt=checkpoints/unet_best.pt --make_viz=True --limit=2

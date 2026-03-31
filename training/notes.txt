@@ -1,0 +1,12 @@
+to train, ensure the venv is active and from the project root directory run:
+python training/main.py \
+  --model unet \
+  --epochs 20 \
+  --early-stop-patience 8
+  --batch-size 1 \
+  --amp \
+  --freeze-bn \
+  --plot-loss \
+  --plot-metrics \
+  --plot-predictions \
+  --num-workers 0
