@@ -1,0 +1,4 @@
+ensure the csv file (from https://maps.cteco.uconn.edu/data/flight2023/ arcgis map) is in ./input
+update MAX_DOWNLOADS in env_vars.py to ensure the disk won't be too full (assume each file is ~500mb, don't try to fill it to the brim because extra is needed for other processing steps)
+ensure the venv is active and from the project root directory run:
+python preprocessing/main.py --run --cleanup
