@@ -44,6 +44,20 @@ run_training() {
 	)
 }
 
+run_model() {
+	log "Running model..."
+	(
+		python runmodel/main.py --model=unet --ckpt=checkpoints/unet_best.pt
+	)
+}
+
+run_create_validation_visuals() {
+	log "Running validation visuals..."
+	(
+		python validation/main.py --model=unet
+	)
+}
+
 main() {
 	local start_epoch
 	local end_epoch
@@ -57,6 +71,8 @@ main() {
 
 	run_preprocessing
 	run_training
+	run_model
+	run_create_validation_visuals
 
 	end_epoch=$(date +%s)
 	end_time=$(date '+%Y-%m-%d %H:%M:%S %Z')
