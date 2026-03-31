@@ -11,10 +11,12 @@ UNTILED_IMAGES_DIR = INPUT_PATH / "untiled_images"
 TILE_OUTPUT_DIR = INPUT_PATH / "images"
 MASK_OUTPUT_DIR = INPUT_PATH / "masks"
 
+CSV_COLUMN_NAME = "Aerial 2023 GeoTIFF"
+
 # Processing settings
 MAX_TILE_SIZE = 1000  # to avoid memory issues when processing large images
 
-MAX_DOWNLOADS=5
+MAX_DOWNLOADS=10
 
 NDVI_THRESHOLDS = {
 	0: (-1.0, 0.0),     # water

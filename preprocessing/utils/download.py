@@ -4,12 +4,12 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 
 try:
-    from ..env_vars import INPUT_PATH
+    from ..env_vars import INPUT_PATH, CSV_COLUMN_NAME
 except ImportError:
-    from env_vars import INPUT_PATH
+    from env_vars import INPUT_PATH, CSV_COLUMN_NAME
 
 # Download settings
-CSV_COLUMN_NAME = "Aerial 2019 GeoTIFF"
+
 CHUNK_SIZE_BYTES = 1024 * 1024
 BYTES_PER_MB = 1024 * 1024
 PROGRESS_BAR_WIDTH = 30
