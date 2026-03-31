@@ -6,9 +6,21 @@ import numpy as np
 import rasterio
 
 try:
-	from ..env_vars import MASK_OUTPUT_DIR, NDVI_THRESHOLDS, TILE_OUTPUT_DIR
+	from ..env_vars import (
+		MASK_OUTPUT_DIR,
+		NDVI_THRESHOLDS,
+		NDWI_WATER_THRESHOLD,
+		TILE_OUTPUT_DIR,
+	)
 except ImportError:
-	from env_vars import MASK_OUTPUT_DIR, NDVI_THRESHOLDS, TILE_OUTPUT_DIR
+	from env_vars import MASK_OUTPUT_DIR, NDVI_THRESHOLDS, NDWI_WATER_THRESHOLD, TILE_OUTPUT_DIR
+
+
+def compute_ndwi(green: np.ndarray, nir: np.ndarray) -> np.ndarray:
+	denominator = green + nir
+	with np.errstate(divide="ignore", invalid="ignore"):
+		ndwi = np.where(denominator == 0, 0.0, (green - nir) / denominator)
+	return ndwi.astype(np.float32)
 
 
 def compute_ndvi(red: np.ndarray, nir: np.ndarray) -> np.ndarray:
@@ -18,10 +30,14 @@ def compute_ndvi(red: np.ndarray, nir: np.ndarray) -> np.ndarray:
 	return ndvi.astype(np.float32)
 
 
-def classify_ndvi(ndvi: np.ndarray) -> np.ndarray:
-	class_mask = np.zeros(ndvi.shape, dtype=np.uint8)
-	threshold_items = list(NDVI_THRESHOLDS.items())
+def classify_hybrid_ndvi_ndwi(ndvi: np.ndarray, ndwi: np.ndarray) -> np.ndarray:
+	class_mask = np.full(ndvi.shape, 1, dtype=np.uint8)
 
+	# NDWI disambiguates non-vegetation pixels: water (0) vs impervious (1).
+	water_pixels = ndwi >= NDWI_WATER_THRESHOLD
+	class_mask[water_pixels] = 0
+
+	threshold_items = list(NDVI_THRESHOLDS.items())
 	for index, (class_label, (low, high)) in enumerate(threshold_items):
 		if index == len(threshold_items) - 1:
 			pixels_in_range = (ndvi >= low) & (ndvi <= high)
@@ -44,10 +60,12 @@ def create_mask(src_dir: Path, dst_dir: Path) -> list[Path]:
 				raise ValueError(f"Expected at least 4 bands in {src_path}, found {src.count}")
 
 			red = src.read(3).astype(np.float32)
+			green = src.read(2).astype(np.float32)
 			nir = src.read(4).astype(np.float32)
 
 			ndvi = compute_ndvi(red, nir)
-			class_mask = classify_ndvi(ndvi)
+			ndwi = compute_ndwi(green, nir)
+			class_mask = classify_hybrid_ndvi_ndwi(ndvi, ndwi)
 
 			profile = src.profile.copy()
 			profile.update(count=1, dtype=rasterio.uint8)

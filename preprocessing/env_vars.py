@@ -19,11 +19,13 @@ MAX_TILE_SIZE = 1000  # to avoid memory issues when processing large images
 
 GAUSSIAN_KERNEL_VALUE = 9
 
-MAX_DOWNLOADS=1
+MAX_DOWNLOADS=100
 
+# NDVI is used to separate vegetation levels.
 NDVI_THRESHOLDS = {
-	0: (-1.0, -0.15),     # water
-	90: (-0.15, 0.2),     # impervious
-	150: (0.2, 0.65),    # sparse vegetation
-	200: (0.65, 1.0),     # dense vegetation
+	2: (0.20, 0.65),      # sparse vegetation
+	3: (0.65, 1.0),       # dense vegetation
 }
+
+# NDWI is used only to split low-NDVI pixels into water vs impervious.
+NDWI_WATER_THRESHOLD = 0.10
