@@ -6,3 +6,6 @@ see ./training/notes.txt
 
 to run the models:
 see ./runmodel/notes.txt
+
+to validate model outputs with dice + visualizations:
+see ./validation/notes.txt
