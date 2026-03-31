@@ -1,70 +1,120 @@
-from pathlib import Path
+"""CLI entrypoint for preprocessing pipeline stages."""
 
-import numpy as np
-import rasterio
+import argparse
 
-
-INPUT_DIR = Path("./input/images")
-OUTPUT_DIR = Path("./input/masks")
-
-NDVI_THRESHOLDS = {
-	0: (-1.0, 0.0),     # water
-	1: (0.0, 0.15),     # impervious
-	2: (0.15, 0.25),    # sparse vegetation
-	3: (0.25, 1.0),     # dense vegetation
-}
-
-
-def compute_ndvi(red: np.ndarray, nir: np.ndarray) -> np.ndarray:
-	denominator = red + nir
-	with np.errstate(divide="ignore", invalid="ignore"):
-		ndvi = np.where(denominator == 0, 0.0, (nir - red) / denominator)
-	return ndvi.astype(np.float32)
+from env_vars import (
+	UNTILED_IMAGES_DIR,
+	BLURRED_IMAGES_DIR,
+	TILE_OUTPUT_DIR,
+	MASK_OUTPUT_DIR,
+	GAUSSIAN_KERNEL_VALUE,
+	MAX_DOWNLOADS,
+)
+from utils.download import download_zips
+from utils.unzip import extract_all_zips
+from utils.clean_folders import clean_non_tif, remove_zip_and_untiled_dirs
+from utils.blur_images import blur_images
+from utils.create_tiles import create_tiles
+from utils.create_masks import create_mask
 
 
-def classify_ndvi(ndvi: np.ndarray) -> np.ndarray:
-	class_mask = np.zeros(ndvi.shape, dtype=np.uint8)
-	threshold_items = list(NDVI_THRESHOLDS.items())
-
-	for index, (class_label, (low, high)) in enumerate(threshold_items):
-		if index == len(threshold_items) - 1:
-			pixels_in_range = (ndvi >= low) & (ndvi <= high)
-		else:
-			pixels_in_range = (ndvi >= low) & (ndvi < high)
-		class_mask[pixels_in_range] = class_label
-
-	return class_mask
+def download() -> None:
+	"""Download ZIP archives from CSV links and extract them."""
+	print("Downloading ZIP files...")
+	download_zips(max_downloads=MAX_DOWNLOADS)
+	print("Extracting ZIP files...")
+	extract_all_zips()
 
 
-def process_file(src_path: Path, dst_dir: Path) -> Path:
-	dst_path = dst_dir / src_path.name
+def tile() -> None:
+	"""Create fixed-size TIFF tiles from untiled source imagery."""
+	print("Creating tiles...")
+	tile_paths = create_tiles(UNTILED_IMAGES_DIR, TILE_OUTPUT_DIR)
+	print(f"Created {len(tile_paths)} tiles")
 
-	with rasterio.open(src_path) as src:
-		if src.count < 4:
-			raise ValueError(f"Expected at least 4 bands in {src_path}, found {src.count}")
 
-		red = src.read(3).astype(np.float32)
-		nir = src.read(4).astype(np.float32)
+def blur() -> None:
+	"""Apply Gaussian blur to each generated tile."""
+	print("Blurring images...")
+	blurred_paths = blur_images(TILE_OUTPUT_DIR, BLURRED_IMAGES_DIR, GAUSSIAN_KERNEL_VALUE)
+	print(f"Created {len(blurred_paths)} blurred images")
 
-		ndvi = compute_ndvi(red, nir)
-		class_mask = classify_ndvi(ndvi)
 
-		profile = src.profile.copy()
-		profile.update(count=1, dtype=rasterio.uint8)
+def mask() -> None:
+	"""Generate class-index masks from blurred image tiles."""
+	print("Creating masks...")
+	mask_paths = create_mask(BLURRED_IMAGES_DIR, MASK_OUTPUT_DIR)
+	print(f"Created {len(mask_paths)} masks")
 
-		with rasterio.open(dst_path, "w", **profile) as dst:
-			dst.write(class_mask, 1)
 
-	return dst_path
+def run_cleanup() -> None:
+	"""Remove non-TIF artifacts and optional temporary directories."""
+	print("Running cleanup...")
+	clean_non_tif()
+	remove_zip_and_untiled_dirs()
+
+
+def parse_args() -> argparse.Namespace:
+	"""Parse and validate CLI flags for pipeline stage execution.
+
+	Returns:
+		argparse.Namespace: Parsed flags for each pipeline stage.
+	"""
+	parser = argparse.ArgumentParser(
+		description="Run preprocessing pipeline steps individually or in sequence."
+	)
+	parser.add_argument(
+		"--download",
+		action="store_true",
+		help="Download and extract ZIP files.",
+	)
+	parser.add_argument(
+		"--tile",
+		action="store_true",
+		help="Create tiles from images.",
+	)
+	parser.add_argument(
+		"--blur",
+		action="store_true",
+		help="Blur tiles.",
+	)
+	parser.add_argument(
+		"--mask",
+		action="store_true",
+		help="Create masks from blurred tiles.",
+	)
+	parser.add_argument(
+		"--cleanup",
+		action="store_true",
+		help="Run cleaning steps.",
+	)
+	args = parser.parse_args()
+
+	if not any([args.download, args.tile, args.blur, args.mask, args.cleanup]):
+		parser.error("Pass at least one of: --download, --tile, --blur, --mask, --cleanup")
+
+	return args
 
 
 def main() -> None:
-	OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-	tif_paths = sorted(INPUT_DIR.glob("*.tif"))
+	"""Run selected preprocessing stages in fixed pipeline order."""
+	args = parse_args()
 
-	for tif_path in tif_paths:
-		dst_path = process_file(tif_path, OUTPUT_DIR)
-		print(f"Wrote {dst_path}")
+	# Execute steps in fixed order regardless of argument order
+	if args.download:
+		download()
+	
+	if args.tile:
+		tile()
+	
+	if args.blur:
+		blur()
+	
+	if args.mask:
+		mask()
+
+	if args.cleanup:
+		run_cleanup()
 
 
 if __name__ == "__main__":

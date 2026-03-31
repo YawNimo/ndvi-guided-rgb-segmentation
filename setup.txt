@@ -3,8 +3,4 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-what is not included:
-checkpoints
-input data
-    RGB input in input/images/
-    ground truth mask in input/masks
+see howtorun.txt to see how to run everything and the order to do it in.

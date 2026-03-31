@@ -1,1 +1,0 @@
-a helper script to download a small subset of images for testing and development purposes
