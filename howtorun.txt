@@ -1,11 +1,20 @@
+to run the entire pipeline from scratch:
+    first, follow the instructions in setup.txt and ensure the venv is active
+    next, run:
+        ./run_pipeline.sh
+
+
+
+instructions for individual pipeline steps:
+
 to download data:
-see ./preprocessing/notes.txt
+    see ./preprocessing/notes.txt
 
 to train the models:
-see ./training/notes.txt
+    see ./training/notes.txt
 
 to run the models:
-see ./runmodel/notes.txt
+    see ./runmodel/notes.txt
 
 to validate model outputs with dice + visualizations:
-see ./validation/notes.txt
+    see ./validation/notes.txt
