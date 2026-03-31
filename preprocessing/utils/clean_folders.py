@@ -4,30 +4,31 @@ import shutil
 import sys
 
 try:
-    from ..env_vars import INPUT_PATH, UNTILED_IMAGES_DIR
+    from ..env_vars import BLURRED_IMAGES_DIR, INPUT_PATH, UNTILED_IMAGES_DIR
 except ImportError:
-    from env_vars import INPUT_PATH, UNTILED_IMAGES_DIR
+    from env_vars import BLURRED_IMAGES_DIR, INPUT_PATH, UNTILED_IMAGES_DIR
 
 
 ZIPS_DIR = INPUT_PATH / "zips"
 
 
 def clean_non_tif():
-    if not UNTILED_IMAGES_DIR.exists():
-        print(f"Skipping missing folder: {UNTILED_IMAGES_DIR}")
-        return
+    for folder in (UNTILED_IMAGES_DIR, BLURRED_IMAGES_DIR):
+        if not folder.exists():
+            print(f"Skipping missing folder: {folder}")
+            continue
 
-    for file in UNTILED_IMAGES_DIR.iterdir():
-        if file.is_file() and file.suffix.lower() != ".tif":
-            print(f"Removing non-TIF file: {file.name}")
-            try:
-                file.unlink()
-            except Exception as e:
-                print(f"Error removing {file.name}: {e}", file=sys.stderr)
+        for file in folder.iterdir():
+            if file.is_file() and file.suffix.lower() != ".tif":
+                print(f"Removing non-TIF file: {file.name}")
+                try:
+                    file.unlink()
+                except Exception as e:
+                    print(f"Error removing {file.name}: {e}", file=sys.stderr)
 
 
 def remove_zip_and_untiled_dirs():
-    for folder in (ZIPS_DIR, UNTILED_IMAGES_DIR):
+    for folder in (ZIPS_DIR, UNTILED_IMAGES_DIR, BLURRED_IMAGES_DIR):
         if folder.exists():
             print(f"Removing folder: {folder}")
             try:
