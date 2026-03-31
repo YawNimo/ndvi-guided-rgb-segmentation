@@ -4,11 +4,11 @@ set -euo pipefail
 
 
 log() {
-	echo "[download_and_train] $*"
+	echo "[run_pipeline] $*"
 }
 
 die() {
-	echo "[download_and_train] ERROR: $*" >&2
+	echo "[run_pipeline] ERROR: $*" >&2
 	exit 1
 }
 
@@ -45,14 +45,14 @@ run_training() {
 }
 
 run_model() {
-	log "Running model..."
+	log "Running model inference pipeline..."
 	(
 		python runmodel/main.py --model=unet --ckpt=checkpoints/unet_best.pt
 	)
 }
 
 run_create_validation_visuals() {
-	log "Running validation visuals..."
+	log "Running validation visuals pipeline..."
 	(
 		python validation/main.py --model=unet
 	)
