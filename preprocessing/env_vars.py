@@ -23,9 +23,9 @@ MAX_DOWNLOADS=100
 
 # NDVI is used to separate vegetation levels.
 NDVI_THRESHOLDS = {
-	2: (0.20, 0.65),      # sparse vegetation
-	3: (0.65, 1.0),       # dense vegetation
+	2: (0.20, 0.5),      # sparse vegetation
+	3: (0.5, 1.0),       # dense vegetation
 }
 
 # NDWI is used only to split low-NDVI pixels into water vs impervious.
-NDWI_WATER_THRESHOLD = 0.10
+NDWI_WATER_THRESHOLD = 0.20
