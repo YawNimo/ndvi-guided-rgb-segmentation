@@ -5,4 +5,4 @@ to train the models:
 see ./training/notes.txt
 
 to run the models:
-see ./src/notes.txt
+see ./runmodel/notes.txt
