@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
-from env_constants import CLASS_COLORS, CLASS_NAMES
+from common.constants import CLASS_COLORS, CLASS_NAMES
 from pathlib import Path
 import numpy as np
 from PIL import Image
-from io_utils import load_gt_mask
+from common.io_utils import load_gt_mask
 
 def plot_triplets(img_dir, msk_dir, pred_dir, tile_names, out_png=None, title=None, show=False):
     cmap_mask = ListedColormap(CLASS_COLORS)

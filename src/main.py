@@ -1,11 +1,17 @@
+import sys
 import torch
 from pathlib import Path
-from build_models import build_model
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from common.models import build_model
 from utils import parse_args
-from io_utils import load_checkpoint
+from common.io_utils import load_checkpoint
 from inference import inference_loop
 from visualization_utils import plot_triplets
-from env_constants import INPUT_IMAGES_SUBDIR, INPUT_MASKS_SUBDIR, OUTPUT_PRED_MASKS_SUBDIR
+from common.constants import INPUT_IMAGES_SUBDIR, INPUT_MASKS_SUBDIR, OUTPUT_PRED_MASKS_SUBDIR
 
 
 

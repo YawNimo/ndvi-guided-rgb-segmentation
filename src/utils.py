@@ -1,4 +1,4 @@
-from env_constants import DEFAULT_INPUT_DIR, DEFAULT_RESULTS_DIR
+from common.constants import DEFAULT_INPUT_DIR, DEFAULT_RESULTS_DIR
 import argparse
 import torch
 

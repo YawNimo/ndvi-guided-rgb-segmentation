@@ -24,14 +24,11 @@ from torchvision.transforms import functional as TF
 from plots import plot_loss, plot_metrics, visualize_predictions, print_metrics_summary
 
 
-# Allow importing from src/ when running this file directly.
-# todo refactor to use a proper package structure and avoid this hack.
 ROOT_DIR = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT_DIR / "src"
-if str(SRC_DIR) not in sys.path:
-	sys.path.insert(0, str(SRC_DIR))
+if str(ROOT_DIR) not in sys.path:
+	sys.path.insert(0, str(ROOT_DIR))
 
-from build_models import build_model
+from common.models import build_model
 
 
 # ==============================================================================

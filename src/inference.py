@@ -1,5 +1,5 @@
 import torch
-from io_utils import load_rgb, save_pred_mask
+from common.io_utils import load_rgb, save_pred_mask
 import numpy as np
 from pathlib import Path
 
