@@ -23,7 +23,7 @@ format_duration() {
 run_preprocessing() {
 	log "Running preprocessing pipeline..."
 	(
-		python preprocessing/main.py --download --tile --blur --mask
+		python preprocessing/main.py --mask
 	)
 }
 
@@ -32,9 +32,9 @@ run_training() {
 	(
 		python training/main.py \
 			--model unet \
-			--epochs 50 \
-			--early-stop-patience 8 \
-			--batch-size 1 \
+			--epochs 10 \
+			--early-stop-patience 5 \
+			--batch-size 2 \
 			--amp \
 			--freeze-bn \
 			--plot-loss \

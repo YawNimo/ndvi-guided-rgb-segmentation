@@ -66,6 +66,7 @@ FREEZE_BN = False
 PLOT_LOSS = False
 PLOT_METRICS = False
 PLOT_PREDICTIONS = False
+USE_WEIGHTED_DICE = True
 
 MODEL_NAME = "unet"  # one of: unet, deeplab, spanetfull
 SUPPORTED_IMAGE_EXTS = (".tif",)  # in case pngs want to be supported later
@@ -101,6 +102,12 @@ def parse_args():
 	parser.add_argument("--plot-loss", action="store_true", help="Plot train/val loss after training")
 	parser.add_argument("--plot-metrics", action="store_true", help="Plot validation metrics after training")
 	parser.add_argument("--plot-predictions", action="store_true", help="Visualize predictions on random samples")
+	parser.add_argument(
+		"--weighted-dice",
+		action=argparse.BooleanOptionalAction,
+		default=USE_WEIGHTED_DICE,
+		help="Enable class-weighted Dice in CE+Dice combined loss",
+	)
 
 	parser.add_argument("--seed", type=int, default=SEED)
 	parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
@@ -330,7 +337,7 @@ def compute_class_weights():
 	"""Compute inverse-frequency class weights from all mask pixels.
 
 	Returns:
-		torch.Tensor: Per-class loss weights as float tensor.
+		tuple[torch.Tensor, dict]: Class weights tensor and audit payload.
 	"""
 	mask_files = _list_supported_images(MSK_DIR)
 	assert mask_files, f"No mask files found in {MSK_DIR}"
@@ -351,15 +358,33 @@ def compute_class_weights():
 	weights = np.sqrt(inv)
 	weights = weights / weights.min()
 
-	print("Class weights:")
-	for i, w in enumerate(weights.tolist()):
-		print(f"  {CLASS_NAMES[i]}: {w:.4f}")
+	print("Class imbalance audit:")
+	for i, name in enumerate(CLASS_NAMES):
+		print(
+			f"  {name}: count={int(counts[i])} "
+			f"freq={freq[i]:.6f} weight={weights[i]:.4f}"
+		)
 
-	return torch.tensor(weights, dtype=torch.float32)
+	audit = {
+		"num_mask_files": len(mask_files),
+		"num_classes": NUM_CLASSES,
+		"class_names": CLASS_NAMES,
+		"pixel_count_per_class": {CLASS_NAMES[i]: int(counts[i]) for i in range(NUM_CLASSES)},
+		"frequency_per_class": {CLASS_NAMES[i]: float(freq[i]) for i in range(NUM_CLASSES)},
+		"ce_weight_per_class": {CLASS_NAMES[i]: float(weights[i]) for i in range(NUM_CLASSES)},
+		"total_pixels": int(total),
+		"frequency_sum": float(freq.sum()),
+	}
+
+	return torch.tensor(weights, dtype=torch.float32), audit
 
 
-def dice_loss(logits, targets, num_classes=NUM_CLASSES, eps=1e-6):
-	"""Compute mean soft Dice loss over all classes."""
+def dice_loss(logits, targets, class_weights=None, num_classes=NUM_CLASSES, eps=1e-6):
+	"""Compute soft Dice loss over all classes.
+
+	If class weights are provided, class Dice is aggregated with normalized
+	weights. Otherwise, unweighted mean Dice is used.
+	"""
 	probs = F.softmax(logits, dim=1)
 	targets_oh = F.one_hot(targets, num_classes).permute(0, 3, 1, 2).float()
 
@@ -368,15 +393,21 @@ def dice_loss(logits, targets, num_classes=NUM_CLASSES, eps=1e-6):
 	union = torch.sum(probs + targets_oh, dims)
 
 	dice = (2 * intersection + eps) / (union + eps)
-	return 1 - dice.mean()
+	if class_weights is None:
+		return 1 - dice.mean()
+
+	norm_weights = class_weights / class_weights.sum().clamp_min(eps)
+	return 1 - torch.sum(dice * norm_weights)
 
 
-def make_combined_loss(class_weights_tensor, device):
+def make_combined_loss(class_weights_tensor, device, use_weighted_dice=False):
 	"""Create combined CE + Dice loss function closure."""
-	ce_loss = nn.CrossEntropyLoss(weight=class_weights_tensor.to(device))
+	class_weights_on_device = class_weights_tensor.to(device)
+	ce_loss = nn.CrossEntropyLoss(weight=class_weights_on_device)
 
 	def combined_loss(logits, targets):
-		return ce_loss(logits, targets) + dice_loss(logits, targets)
+		dice_weights = class_weights_on_device if use_weighted_dice else None
+		return ce_loss(logits, targets) + dice_loss(logits, targets, class_weights=dice_weights)
 
 	return combined_loss
 
@@ -530,6 +561,7 @@ def train_model(
 	train_loader,
 	val_loader,
 	combined_loss_fn,
+	run_metadata,
 	model_name,
 	device,
 	lr=LEARNING_RATE,
@@ -636,7 +668,7 @@ def train_model(
 
 			torch.save(model.state_dict(), ckpt_path)
 			with open(metrics_path, "w", encoding="utf-8") as f:
-				json.dump({"best": row, "history": history}, f, indent=2)
+				json.dump({"run_metadata": run_metadata, "best": row, "history": history}, f, indent=2)
 
 			best["path_ckpt"] = str(ckpt_path)
 			best["path_metrics"] = str(metrics_path)
@@ -668,7 +700,7 @@ def main():
 	global NUM_WORKERS, PIN_MEMORY
 	global USE_AMP, GRAD_ACCUM_STEPS
 	global FREEZE_BN
-	global PLOT_LOSS, PLOT_METRICS, PLOT_PREDICTIONS
+	global PLOT_LOSS, PLOT_METRICS, PLOT_PREDICTIONS, USE_WEIGHTED_DICE
 	global MAX_IMAGES
 	global IMG_DIR, MSK_DIR, RESULTS_DIR, CHECKPOINT_DIR
 
@@ -694,6 +726,7 @@ def main():
 	PLOT_LOSS = args.plot_loss
 	PLOT_METRICS = args.plot_metrics
 	PLOT_PREDICTIONS = args.plot_predictions
+	USE_WEIGHTED_DICE = args.weighted_dice
 	MAX_IMAGES = args.max_images
 
 	IMG_DIR = args.img_dir
@@ -722,12 +755,29 @@ def main():
 	print(f"AMP enabled: {USE_AMP}")
 	print(f"Gradient accumulation steps: {GRAD_ACCUM_STEPS}")
 	print(f"Freeze BatchNorm: {FREEZE_BN}")
+	print(f"Weighted Dice enabled: {USE_WEIGHTED_DICE}")
 
 	pairs, train_idx, val_idx, test_idx = create_data_split()
 	train_loader, val_loader, _ = create_dataloaders(pairs, train_idx, val_idx, test_idx)
 
-	class_weights = compute_class_weights()
-	combined_loss_fn = make_combined_loss(class_weights, device)
+	RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+	class_weights, imbalance_audit = compute_class_weights()
+	imbalance_audit_path = RESULTS_DIR / f"{MODEL_NAME}_class_imbalance_audit.json"
+	with open(imbalance_audit_path, "w", encoding="utf-8") as f:
+		json.dump(imbalance_audit, f, indent=2)
+	print(f"Saved class-imbalance audit: {imbalance_audit_path}")
+
+	combined_loss_fn = make_combined_loss(class_weights, device, use_weighted_dice=USE_WEIGHTED_DICE)
+
+	run_metadata = {
+		"model": MODEL_NAME,
+		"seed": SEED,
+		"device": device,
+		"weighted_dice_enabled": bool(USE_WEIGHTED_DICE),
+		"ce_weight_per_class": imbalance_audit["ce_weight_per_class"],
+		"frequency_per_class": imbalance_audit["frequency_per_class"],
+		"class_imbalance_audit_path": str(imbalance_audit_path),
+	}
 
 	model = build_model(MODEL_NAME, num_classes=NUM_CLASSES).to(device)
 	print_model_info(model, MODEL_NAME)
@@ -738,8 +788,12 @@ def main():
 			train_loader=train_loader,
 			val_loader=val_loader,
 			combined_loss_fn=combined_loss_fn,
+			run_metadata=run_metadata,
 			model_name=MODEL_NAME,
 			device=device,
+			lr=LEARNING_RATE,
+			weight_decay=WEIGHT_DECAY,
+			epochs=EPOCHS,
 			use_amp=USE_AMP,
 			grad_accum_steps=GRAD_ACCUM_STEPS,
 			freeze_bn=FREEZE_BN,
