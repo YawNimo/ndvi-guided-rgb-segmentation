@@ -44,7 +44,7 @@ run_training() {
 		python training/main.py \
 			--run-name "$RUN_NAME" \
 			--model unet \
-			--epochs 12 \
+			--epochs 24 \
 			--early-stop-patience 6 \
 			--batch-size 4 \
 			--val-batch-size 8 \

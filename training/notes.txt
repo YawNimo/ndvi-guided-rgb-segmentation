@@ -25,7 +25,7 @@ full validation profile (for final confirmation runs):
 python training/main.py \
   --run-name confirm_full \
   --model unet \
-  --epochs 12 \
+  --epochs 24 \
   --early-stop-patience 6 \
   --batch-size 4 \
   --val-batch-size 8 \
