@@ -4,6 +4,7 @@ Training-only entrypoint for NDVI-guided RGB segmentation.
 
 import json
 import argparse
+import hashlib
 import os
 import random
 import sys
@@ -67,10 +68,21 @@ PLOT_LOSS = False
 PLOT_METRICS = False
 PLOT_PREDICTIONS = False
 USE_WEIGHTED_DICE = True
+LOSS_TYPE = "gdl"  # one of: soft_dice, gdl
+DICE_WEIGHT = 1.0
+SCHEDULER_TYPE = "plateau"  # one of: plateau, cosine
+WARMUP_EPOCHS = 1
+DETERMINISTIC = True
+CUDNN_BENCHMARK = False
+PERSISTENT_WORKERS = False
+PREFETCH_FACTOR = 2
+FUSED_ADAMW = False
 
 MODEL_NAME = "unet"  # one of: unet, deeplab, spanetfull
 SUPPORTED_IMAGE_EXTS = (".tif",)  # in case pngs want to be supported later
-MAX_IMAGES = None
+SAMPLE_SIZE = None
+SAMPLE_SEED = SEED
+RUN_NAME = "default"
 
 
 def parse_args():
@@ -102,16 +114,27 @@ def parse_args():
 	parser.add_argument("--plot-loss", action="store_true", help="Plot train/val loss after training")
 	parser.add_argument("--plot-metrics", action="store_true", help="Plot validation metrics after training")
 	parser.add_argument("--plot-predictions", action="store_true", help="Visualize predictions on random samples")
+	parser.add_argument("--run-name", type=str, default=RUN_NAME, help="Run identity for checkpoint/result file names")
 	parser.add_argument(
 		"--weighted-dice",
 		action=argparse.BooleanOptionalAction,
 		default=USE_WEIGHTED_DICE,
 		help="Enable class-weighted Dice in CE+Dice combined loss",
 	)
+	parser.add_argument("--loss-type", type=str, default=LOSS_TYPE, choices=["soft_dice", "gdl"])
+	parser.add_argument("--dice-weight", type=float, default=DICE_WEIGHT)
+	parser.add_argument("--scheduler", type=str, default=SCHEDULER_TYPE, choices=["plateau", "cosine"])
+	parser.add_argument("--warmup-epochs", type=int, default=WARMUP_EPOCHS)
+	parser.add_argument("--deterministic", action=argparse.BooleanOptionalAction, default=DETERMINISTIC)
+	parser.add_argument("--cudnn-benchmark", action=argparse.BooleanOptionalAction, default=CUDNN_BENCHMARK)
+	parser.add_argument("--persistent-workers", action=argparse.BooleanOptionalAction, default=PERSISTENT_WORKERS)
+	parser.add_argument("--prefetch-factor", type=int, default=PREFETCH_FACTOR)
+	parser.add_argument("--fused-adamw", action=argparse.BooleanOptionalAction, default=FUSED_ADAMW)
 
 	parser.add_argument("--seed", type=int, default=SEED)
 	parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
-	parser.add_argument("--max-images", type=int, default=MAX_IMAGES)
+	parser.add_argument("--sample-size", type=int, default=SAMPLE_SIZE)
+	parser.add_argument("--sample-seed", type=int, default=SAMPLE_SEED)
 
 	parser.add_argument("--img-dir", type=Path, default=IMG_DIR)
 	parser.add_argument("--msk-dir", type=Path, default=MSK_DIR)
@@ -132,20 +155,28 @@ def parse_args():
 		raise ValueError("--learning-rate must be > 0")
 	if args.grad_accum_steps <= 0:
 		raise ValueError("--grad-accum-steps must be > 0")
-	if args.max_images is not None and args.max_images <= 0:
-		raise ValueError("--max-images must be > 0 when provided")
+	if args.sample_size is not None and args.sample_size <= 0:
+		raise ValueError("--sample-size must be > 0 when provided")
+	if args.dice_weight <= 0:
+		raise ValueError("--dice-weight must be > 0")
+	if args.warmup_epochs < 0:
+		raise ValueError("--warmup-epochs must be >= 0")
+	if args.prefetch_factor <= 0:
+		raise ValueError("--prefetch-factor must be > 0")
+	if args.deterministic and args.cudnn_benchmark:
+		raise ValueError("--deterministic and --cudnn-benchmark cannot both be enabled")
 
 	return args
 
 
-def set_seed(seed: int = 42):
+def set_seed(seed: int = 42, deterministic: bool = True, cudnn_benchmark: bool = False):
 	"""Set deterministic random seeds for Python, NumPy, and PyTorch."""
 	random.seed(seed)
 	np.random.seed(seed)
 	torch.manual_seed(seed)
 	torch.cuda.manual_seed_all(seed)
-	torch.backends.cudnn.deterministic = True
-	torch.backends.cudnn.benchmark = False
+	torch.backends.cudnn.deterministic = bool(deterministic)
+	torch.backends.cudnn.benchmark = bool(cudnn_benchmark)
 	os.environ["PYTHONHASHSEED"] = str(seed)
 
 
@@ -243,14 +274,16 @@ def create_data_split():
 	"""Create train/val/test index splits from discovered image-mask pairs.
 
 	Returns:
-		tuple: ``(pairs, train_idx, val_idx, test_idx)``.
+		tuple: ``(pairs, train_idx, val_idx, test_idx, split_info)``.
 	"""
 	assert IMG_DIR.exists(), f"Missing image dir: {IMG_DIR}"
 	assert MSK_DIR.exists(), f"Missing mask dir: {MSK_DIR}"
 
 	img_files = _list_supported_images(IMG_DIR)
-	if MAX_IMAGES is not None:
-		img_files = img_files[:MAX_IMAGES]
+	total_img_files = len(img_files)
+	if SAMPLE_SIZE is not None and SAMPLE_SIZE < len(img_files):
+		rng = random.Random(SAMPLE_SEED)
+		img_files = sorted(rng.sample(img_files, SAMPLE_SIZE))
 	mask_files = _list_supported_images(MSK_DIR)
 	mask_lookup = _build_mask_lookup(mask_files)
 	pairs = []
@@ -292,14 +325,28 @@ def create_data_split():
 			"--train-ratio/--val-ratio."
 		)
 
-	print(f"Image tiles found: {len(img_files)}")
+	selected_paths = [str(p) for p in img_files]
+	split_signature = hashlib.sha256("\n".join(selected_paths).encode("utf-8")).hexdigest()[:16]
+
+	print(f"Image tiles found (total): {total_img_files}")
+	print(f"Image tiles selected: {len(img_files)}")
 	print(f"Mask files found: {len(mask_files)}")
-	print(f"Max images cap: {MAX_IMAGES}")
+	print(f"Sample size: {SAMPLE_SIZE}")
+	print(f"Sample seed: {SAMPLE_SEED}")
+	print(f"Selection signature: {split_signature}")
 	print(f"Paired tiles: {len(pairs)}")
 	print(f"Missing masks: {missing}")
 	print(f"Split -> Train: {len(train_idx)}, Val: {len(val_idx)}, Test: {len(test_idx)}")
 
-	return pairs, train_idx, val_idx, test_idx
+	split_info = {
+		"total_images_found": total_img_files,
+		"images_selected": len(img_files),
+		"sample_size": SAMPLE_SIZE,
+		"sample_seed": SAMPLE_SEED,
+		"selection_signature": split_signature,
+	}
+
+	return pairs, train_idx, val_idx, test_idx, split_info
 
 
 def create_dataloaders(pairs, train_idx, val_idx, test_idx):
@@ -307,27 +354,29 @@ def create_dataloaders(pairs, train_idx, val_idx, test_idx):
 	train_ds = TileSegDataset(pairs, train_idx, train=True)
 	val_ds = TileSegDataset(pairs, val_idx, train=False)
 	test_ds = TileSegDataset(pairs, test_idx, train=False)
+	dl_kwargs = {
+		"batch_size": BATCH_SIZE,
+		"num_workers": NUM_WORKERS,
+		"pin_memory": PIN_MEMORY,
+	}
+	if NUM_WORKERS > 0:
+		dl_kwargs["persistent_workers"] = PERSISTENT_WORKERS
+		dl_kwargs["prefetch_factor"] = PREFETCH_FACTOR
 
 	train_loader = DataLoader(
 		train_ds,
-		batch_size=BATCH_SIZE,
 		shuffle=True,
-		num_workers=NUM_WORKERS,
-		pin_memory=PIN_MEMORY,
+		**dl_kwargs,
 	)
 	val_loader = DataLoader(
 		val_ds,
-		batch_size=BATCH_SIZE,
 		shuffle=False,
-		num_workers=NUM_WORKERS,
-		pin_memory=PIN_MEMORY,
+		**dl_kwargs,
 	)
 	test_loader = DataLoader(
 		test_ds,
-		batch_size=BATCH_SIZE,
 		shuffle=False,
-		num_workers=NUM_WORKERS,
-		pin_memory=PIN_MEMORY,
+		**dl_kwargs,
 	)
 
 	return train_loader, val_loader, test_loader
@@ -379,7 +428,7 @@ def compute_class_weights():
 	return torch.tensor(weights, dtype=torch.float32), audit
 
 
-def dice_loss(logits, targets, class_weights=None, num_classes=NUM_CLASSES, eps=1e-6):
+def soft_dice_loss(logits, targets, class_weights=None, num_classes=NUM_CLASSES, eps=1e-6):
 	"""Compute soft Dice loss over all classes.
 
 	If class weights are provided, class Dice is aggregated with normalized
@@ -400,14 +449,47 @@ def dice_loss(logits, targets, class_weights=None, num_classes=NUM_CLASSES, eps=
 	return 1 - torch.sum(dice * norm_weights)
 
 
-def make_combined_loss(class_weights_tensor, device, use_weighted_dice=False):
+def generalized_dice_loss(logits, targets, num_classes=NUM_CLASSES, eps=1e-6):
+	"""Canonical Generalized Dice Loss (Sudre et al.) using inverse squared class volume."""
+	probs = F.softmax(logits, dim=1)
+	targets_oh = F.one_hot(targets, num_classes).permute(0, 3, 1, 2).float()
+
+	dims = (0, 2, 3)
+	intersection = torch.sum(probs * targets_oh, dims)
+	probs_sum = torch.sum(probs, dims)
+	target_sum = torch.sum(targets_oh, dims)
+
+	valid = target_sum > 0
+	if not torch.any(valid):
+		return 1 - ((2 * intersection + eps) / (probs_sum + target_sum + eps)).mean()
+
+	weights = torch.zeros_like(target_sum)
+	weights[valid] = 1.0 / torch.square(target_sum[valid].clamp_min(eps))
+
+	numerator = torch.sum(2.0 * weights * intersection)
+	denominator = torch.sum(weights * (probs_sum + target_sum))
+	gdice = (numerator + eps) / (denominator + eps)
+	return 1.0 - gdice
+
+
+def make_combined_loss(
+	class_weights_tensor,
+	device,
+	use_weighted_dice=False,
+	loss_type="gdl",
+	dice_weight=1.0,
+):
 	"""Create combined CE + Dice loss function closure."""
 	class_weights_on_device = class_weights_tensor.to(device)
 	ce_loss = nn.CrossEntropyLoss(weight=class_weights_on_device)
 
 	def combined_loss(logits, targets):
-		dice_weights = class_weights_on_device if use_weighted_dice else None
-		return ce_loss(logits, targets) + dice_loss(logits, targets, class_weights=dice_weights)
+		if loss_type == "soft_dice":
+			dice_weights = class_weights_on_device if use_weighted_dice else None
+			dice_term = soft_dice_loss(logits, targets, class_weights=dice_weights)
+		else:
+			dice_term = generalized_dice_loss(logits, targets)
+		return ce_loss(logits, targets) + dice_weight * dice_term
 
 	return combined_loss
 
@@ -570,6 +652,9 @@ def train_model(
 	use_amp=USE_AMP,
 	grad_accum_steps=GRAD_ACCUM_STEPS,
 	freeze_bn=FREEZE_BN,
+	scheduler_type=SCHEDULER_TYPE,
+	warmup_epochs=WARMUP_EPOCHS,
+	fused_adamw=FUSED_ADAMW,
 ):
 	"""Train model with validation tracking, checkpointing, and early stopping.
 
@@ -579,13 +664,38 @@ def train_model(
 	CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 	RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-	optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-	scheduler = ReduceLROnPlateau(
-		optimizer,
-		mode="min",
-		factor=LR_SCHEDULER_FACTOR,
-		patience=LR_SCHEDULER_PATIENCE,
-	)
+	adamw_kwargs = {"lr": lr, "weight_decay": weight_decay}
+	if fused_adamw and device == "cuda":
+		adamw_kwargs["fused"] = True
+	optimizer = torch.optim.AdamW(model.parameters(), **adamw_kwargs)
+
+	if scheduler_type == "plateau":
+		scheduler = ReduceLROnPlateau(
+			optimizer,
+			mode="min",
+			factor=LR_SCHEDULER_FACTOR,
+			patience=LR_SCHEDULER_PATIENCE,
+		)
+	else:
+		warmup_iters = min(max(0, warmup_epochs), max(0, epochs - 1))
+		if warmup_iters > 0:
+			warmup = torch.optim.lr_scheduler.LinearLR(
+				optimizer,
+				start_factor=0.2,
+				end_factor=1.0,
+				total_iters=warmup_iters,
+			)
+			cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+				optimizer,
+				T_max=max(1, epochs - warmup_iters),
+			)
+			scheduler = torch.optim.lr_scheduler.SequentialLR(
+				optimizer,
+				schedulers=[warmup, cosine],
+				milestones=[warmup_iters],
+			)
+		else:
+			scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, epochs))
 
 	history = []
 	best = {
@@ -627,7 +737,10 @@ def train_model(
 			model_name=model_name,
 		)
 
-		scheduler.step(va_loss)
+		if scheduler_type == "plateau":
+			scheduler.step(va_loss)
+		else:
+			scheduler.step()
 		current_lr = optimizer.param_groups[0]["lr"]
 		val_f1 = float(va_metrics["f1_macro"])
 		epoch_bar.set_postfix(val_f1=f"{val_f1:.4f}", lr=f"{current_lr:.1e}")
@@ -663,8 +776,9 @@ def train_model(
 			best["epoch"] = epoch
 			epochs_no_improve = 0
 
-			ckpt_path = CHECKPOINT_DIR / f"{model_name}_best.pt"
-			metrics_path = RESULTS_DIR / f"{model_name}_best_metrics.json"
+			run_name = str(run_metadata.get("run_name", "default"))
+			ckpt_path = CHECKPOINT_DIR / f"{run_name}_{model_name}_best.pt"
+			metrics_path = RESULTS_DIR / f"{run_name}_{model_name}_best_metrics.json"
 
 			torch.save(model.state_dict(), ckpt_path)
 			with open(metrics_path, "w", encoding="utf-8") as f:
@@ -701,7 +815,10 @@ def main():
 	global USE_AMP, GRAD_ACCUM_STEPS
 	global FREEZE_BN
 	global PLOT_LOSS, PLOT_METRICS, PLOT_PREDICTIONS, USE_WEIGHTED_DICE
-	global MAX_IMAGES
+	global LOSS_TYPE, DICE_WEIGHT, SCHEDULER_TYPE, WARMUP_EPOCHS
+	global DETERMINISTIC, CUDNN_BENCHMARK
+	global PERSISTENT_WORKERS, PREFETCH_FACTOR, FUSED_ADAMW
+	global SAMPLE_SIZE, SAMPLE_SEED, RUN_NAME
 	global IMG_DIR, MSK_DIR, RESULTS_DIR, CHECKPOINT_DIR
 
 	args = parse_args()
@@ -727,14 +844,25 @@ def main():
 	PLOT_METRICS = args.plot_metrics
 	PLOT_PREDICTIONS = args.plot_predictions
 	USE_WEIGHTED_DICE = args.weighted_dice
-	MAX_IMAGES = args.max_images
+	LOSS_TYPE = args.loss_type
+	DICE_WEIGHT = args.dice_weight
+	SCHEDULER_TYPE = args.scheduler
+	WARMUP_EPOCHS = args.warmup_epochs
+	DETERMINISTIC = args.deterministic
+	CUDNN_BENCHMARK = args.cudnn_benchmark
+	PERSISTENT_WORKERS = args.persistent_workers
+	PREFETCH_FACTOR = args.prefetch_factor
+	FUSED_ADAMW = args.fused_adamw
+	SAMPLE_SIZE = args.sample_size
+	SAMPLE_SEED = args.sample_seed
+	RUN_NAME = args.run_name
 
 	IMG_DIR = args.img_dir
 	MSK_DIR = args.msk_dir
 	RESULTS_DIR = args.results_dir
 	CHECKPOINT_DIR = args.checkpoint_dir
 
-	set_seed(SEED)
+	set_seed(SEED, deterministic=DETERMINISTIC, cudnn_benchmark=CUDNN_BENCHMARK)
 	if args.device == "auto":
 		device = "cuda" if torch.cuda.is_available() else "cpu"
 	else:
@@ -756,24 +884,53 @@ def main():
 	print(f"Gradient accumulation steps: {GRAD_ACCUM_STEPS}")
 	print(f"Freeze BatchNorm: {FREEZE_BN}")
 	print(f"Weighted Dice enabled: {USE_WEIGHTED_DICE}")
+	print(f"Loss type: {LOSS_TYPE}")
+	print(f"Dice weight: {DICE_WEIGHT}")
+	print(f"Scheduler: {SCHEDULER_TYPE}")
+	print(f"Run name: {RUN_NAME}")
+	print(f"Deterministic: {DETERMINISTIC}")
+	print(f"cuDNN benchmark: {CUDNN_BENCHMARK}")
+	print(f"Persistent workers: {PERSISTENT_WORKERS}")
+	print(f"Prefetch factor: {PREFETCH_FACTOR}")
+	print(f"Fused AdamW: {FUSED_ADAMW}")
 
-	pairs, train_idx, val_idx, test_idx = create_data_split()
+	pairs, train_idx, val_idx, test_idx, split_info = create_data_split()
 	train_loader, val_loader, _ = create_dataloaders(pairs, train_idx, val_idx, test_idx)
 
 	RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 	class_weights, imbalance_audit = compute_class_weights()
-	imbalance_audit_path = RESULTS_DIR / f"{MODEL_NAME}_class_imbalance_audit.json"
+	imbalance_audit_path = RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_class_imbalance_audit.json"
 	with open(imbalance_audit_path, "w", encoding="utf-8") as f:
 		json.dump(imbalance_audit, f, indent=2)
 	print(f"Saved class-imbalance audit: {imbalance_audit_path}")
 
-	combined_loss_fn = make_combined_loss(class_weights, device, use_weighted_dice=USE_WEIGHTED_DICE)
+	combined_loss_fn = make_combined_loss(
+		class_weights,
+		device,
+		use_weighted_dice=USE_WEIGHTED_DICE,
+		loss_type=LOSS_TYPE,
+		dice_weight=DICE_WEIGHT,
+	)
 
 	run_metadata = {
+		"run_name": RUN_NAME,
 		"model": MODEL_NAME,
 		"seed": SEED,
 		"device": device,
+		"batch_size": BATCH_SIZE,
 		"weighted_dice_enabled": bool(USE_WEIGHTED_DICE),
+		"loss_type": LOSS_TYPE,
+		"dice_weight": DICE_WEIGHT,
+		"scheduler": SCHEDULER_TYPE,
+		"warmup_epochs": WARMUP_EPOCHS,
+		"deterministic": bool(DETERMINISTIC),
+		"cudnn_benchmark": bool(CUDNN_BENCHMARK),
+		"persistent_workers": bool(PERSISTENT_WORKERS),
+		"prefetch_factor": PREFETCH_FACTOR,
+		"fused_adamw": bool(FUSED_ADAMW),
+		"sample_size": SAMPLE_SIZE,
+		"sample_seed": SAMPLE_SEED,
+		"split_info": split_info,
 		"ce_weight_per_class": imbalance_audit["ce_weight_per_class"],
 		"frequency_per_class": imbalance_audit["frequency_per_class"],
 		"class_imbalance_audit_path": str(imbalance_audit_path),
@@ -797,41 +954,44 @@ def main():
 			use_amp=USE_AMP,
 			grad_accum_steps=GRAD_ACCUM_STEPS,
 			freeze_bn=FREEZE_BN,
+			scheduler_type=SCHEDULER_TYPE,
+			warmup_epochs=WARMUP_EPOCHS,
+			fused_adamw=FUSED_ADAMW,
 		)
 
 		print("\n" + "=" * 80)
 		print("TRAINING COMPLETE")
 		print("=" * 80)
-		print_metrics_summary(RESULTS_DIR / f"{MODEL_NAME}_best_metrics.json")
+		print_metrics_summary(RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_best_metrics.json")
 
 		if PLOT_LOSS:
 			print("Generating loss plot...")
-			with open(RESULTS_DIR / f"{MODEL_NAME}_best_metrics.json") as f:
+			with open(RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_best_metrics.json") as f:
 				hist_data = json.load(f)
 			plot_loss(
 				hist_data["history"],
-				output_path=RESULTS_DIR / f"{MODEL_NAME}_loss_curve.png",
+				output_path=RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_loss_curve.png",
 				title=f"{MODEL_NAME}: Loss vs Epoch",
 			)
 
 		if PLOT_METRICS:
 			print("Generating metric plots...")
-			with open(RESULTS_DIR / f"{MODEL_NAME}_best_metrics.json") as f:
+			with open(RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_best_metrics.json") as f:
 				hist_data = json.load(f)
 			plot_metrics(
 				hist_data["history"],
-				output_path=RESULTS_DIR / f"{MODEL_NAME}_f1_curve.png",
+				output_path=RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_f1_curve.png",
 				metric_key="val_f1_macro",
 			)
 			plot_metrics(
 				hist_data["history"],
-				output_path=RESULTS_DIR / f"{MODEL_NAME}_iou_curve.png",
+				output_path=RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_iou_curve.png",
 				metric_key="val_iou_macro",
 			)
 
 		if PLOT_PREDICTIONS:
 			print("Generating prediction visualizations...")
-			ckpt = torch.load(CHECKPOINT_DIR / f"{MODEL_NAME}_best.pt", map_location=device)
+			ckpt = torch.load(CHECKPOINT_DIR / f"{RUN_NAME}_{MODEL_NAME}_best.pt", map_location=device)
 			model.load_state_dict(ckpt)
 			model.to(device)
 			visualize_predictions(
@@ -841,7 +1001,7 @@ def main():
 				MSK_DIR,
 				num_samples=4,
 				device=device,
-				output_path=RESULTS_DIR / f"{MODEL_NAME}_predictions.png",
+				output_path=RESULTS_DIR / f"{RUN_NAME}_{MODEL_NAME}_predictions.png",
 			)
 	except torch.OutOfMemoryError as e:
 		if device == "cuda":
