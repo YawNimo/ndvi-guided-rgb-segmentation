@@ -34,7 +34,7 @@ activate_venv() {
 run_preprocessing() {
 	log "Running preprocessing pipeline..."
 	(
-		python preprocessing/main.py --mask
+		python preprocessing/main.py --download --tile --blur --mask
 	)
 }
 
@@ -47,16 +47,22 @@ run_training() {
 			--epochs 12 \
 			--early-stop-patience 6 \
 			--batch-size 4 \
+			--val-batch-size 8 \
 			--amp \
 			--loss-type gdl \
 			--dice-weight 0.7 \
 			--scheduler plateau \
+			--val-frequency 1 \
+			--full-metrics-frequency 1 \
 			--deterministic \
 			--no-cudnn-benchmark \
+			--cache-class-weights \
+			--num-workers 4 \
+			--persistent-workers \
 			--plot-loss \
+			--prefetch-factor 4 \
 			--plot-metrics \
-			--plot-predictions \
-			--num-workers 2
+			--plot-predictions
 	)
 }
 

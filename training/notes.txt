@@ -1,12 +1,43 @@
-to train, ensure the venv is active and from the project root directory run:
+to train, ensure the venv is active and from the project root directory run one of these:
+
+fast deterministic sampled-iteration profile (default recommendation):
 python training/main.py \
+  --run-name speed_iter \
   --model unet \
-  --epochs 20 \
-  --early-stop-patience 8 \
-  --batch-size 1 \
+  --epochs 12 \
+  --early-stop-patience 6 \
+  --batch-size 4 \
+  --val-batch-size 8 \
   --amp \
-  --freeze-bn \
-  --plot-loss \
-  --plot-metrics \
-  --plot-predictions \
-  --num-workers 0
+  --loss-type gdl \
+  --dice-weight 0.7 \
+  --scheduler plateau \
+  --val-frequency 2 \
+  --full-metrics-frequency 2 \
+  --deterministic \
+  --no-cudnn-benchmark \
+  --cache-class-weights \
+  --num-workers 4 \
+  --persistent-workers \
+  --prefetch-factor 4
+
+full validation profile (for final confirmation runs):
+python training/main.py \
+  --run-name confirm_full \
+  --model unet \
+  --epochs 12 \
+  --early-stop-patience 6 \
+  --batch-size 4 \
+  --val-batch-size 8 \
+  --amp \
+  --loss-type gdl \
+  --dice-weight 0.7 \
+  --scheduler plateau \
+  --val-frequency 1 \
+  --full-metrics-frequency 1 \
+  --deterministic \
+  --no-cudnn-benchmark \
+  --cache-class-weights \
+  --num-workers 4 \
+  --persistent-workers \
+  --prefetch-factor 4
