@@ -20,7 +20,7 @@ GAUSSIAN_KERNEL_VALUE = 9
 MAX_DOWNLOADS=100
 
 NDVI_THRESHOLDS = {
-	2: (0.3, 0.5),      # sparse vegetation
+	2: (0.2, 0.5),      # sparse vegetation
 	3: (0.5, 1.0),       # dense vegetation
 }
 
