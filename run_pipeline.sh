@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+ROOT_DIR="/home/ehurd1@cfreg.local/ndvi-guided-rgb-segmentation"
+VENV_ACTIVATE="${ROOT_DIR}/venv/bin/activate"
+RUN_NAME="pipeline_best"
+
 
 log() {
 	echo "[run_pipeline] $*"
@@ -20,6 +24,13 @@ format_duration() {
 	printf "%02dh:%02dm:%02ds" "$hours" "$minutes" "$seconds"
 }
 
+activate_venv() {
+	[[ -f "$VENV_ACTIVATE" ]] || die "Missing venv activation script: $VENV_ACTIVATE"
+	# shellcheck disable=SC1090
+	source "$VENV_ACTIVATE"
+	log "Activated venv: $VENV_ACTIVATE"
+}
+
 run_preprocessing() {
 	log "Running preprocessing pipeline..."
 	(
@@ -31,23 +42,34 @@ run_training() {
 	log "Running training pipeline..."
 	(
 		python training/main.py \
+			--run-name "$RUN_NAME" \
 			--model unet \
-			--epochs 50 \
-			--early-stop-patience 8 \
-			--batch-size 1 \
+			--epochs 24 \
+			--early-stop-patience 6 \
+			--batch-size 4 \
+			--val-batch-size 8 \
 			--amp \
-			--freeze-bn \
+			--loss-type gdl \
+			--dice-weight 0.7 \
+			--scheduler plateau \
+			--val-frequency 1 \
+			--full-metrics-frequency 1 \
+			--deterministic \
+			--no-cudnn-benchmark \
+			--cache-class-weights \
+			--num-workers 4 \
+			--persistent-workers \
 			--plot-loss \
+			--prefetch-factor 4 \
 			--plot-metrics \
-			--plot-predictions \
-			--num-workers 0
+			--plot-predictions
 	)
 }
 
 run_model() {
 	log "Running model inference pipeline..."
 	(
-		python runmodel/main.py --model=unet --ckpt=checkpoints/unet_best.pt
+		python runmodel/main.py --model=unet --ckpt="checkpoints/${RUN_NAME}_unet_best.pt"
 	)
 }
 
@@ -68,6 +90,7 @@ main() {
 	start_epoch=$(date +%s)
 	start_time=$(date '+%Y-%m-%d %H:%M:%S %Z')
 	log "Start time: ${start_time}"
+	activate_venv
 
 	run_preprocessing
 	run_training

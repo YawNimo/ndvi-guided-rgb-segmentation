@@ -22,7 +22,7 @@ def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     cleaned = hex_color.lstrip("#")
     if len(cleaned) != 6:
         raise ValueError(f"Invalid hex color: {hex_color}")
-    return tuple(int(cleaned[i : i + 2], 16) for i in (0, 2, 4))
+    return tuple(int(cleaned[i : i + 2], 16) for i in (0, 2, 4)) # type: ignore
 
 
 def normalize_mask_array(mask: np.ndarray) -> np.ndarray:
