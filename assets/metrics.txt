@@ -1,0 +1,16 @@
+Best Epoch: 13
+    Macro F1: 0.8230
+    Macro IoU: 0.7482
+    Pixel Accuracy: 0.9397
+
+Per-Class F1 Scores:
+    water: 0.9782
+    impervious: 0.9396
+    sparse_veg: 0.9242
+    dense_veg: 0.4501
+
+Per-Class IoU Scores:
+    water: 0.9573
+    impervious: 0.8860
+    sparse_veg: 0.8591
+    dense_veg: 0.2904
