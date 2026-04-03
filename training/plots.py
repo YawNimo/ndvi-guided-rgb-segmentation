@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 import numpy as np
 import torch
 from PIL import Image
@@ -202,11 +203,12 @@ def visualize_predictions(
         axs[i, 0].set_title(f"RGB: {img_path.name}")
         axs[i, 0].axis("off")
 
-        axs[i, 1].imshow(gt, cmap="tab10", vmin=0, vmax=3)
+        classes_cmap = ListedColormap(CLASS_COLORS)
+        axs[i, 1].imshow(gt, cmap=classes_cmap, vmin=0, vmax=3)
         axs[i, 1].set_title("Ground Truth")
         axs[i, 1].axis("off")
 
-        axs[i, 2].imshow(pred, cmap="tab10", vmin=0, vmax=3)
+        axs[i, 2].imshow(pred, cmap=classes_cmap, vmin=0, vmax=3)
         axs[i, 2].set_title("Prediction")
         axs[i, 2].axis("off")
 
