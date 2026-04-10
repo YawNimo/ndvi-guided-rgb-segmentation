@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="/home/ehurd1@cfreg.local/ndvi-guided-rgb-segmentation"
 VENV_ACTIVATE="${ROOT_DIR}/venv/bin/activate"
 RUN_NAME="pipeline_best"
+MODEL="spanetfull"
 
 
 log() {
@@ -43,10 +44,10 @@ run_training() {
 	(
 		python training/main.py \
 			--run-name "$RUN_NAME" \
-			--model unet \
+			--model $MODEL \
 			--epochs 24 \
 			--early-stop-patience 6 \
-			--batch-size 4 \
+			--batch-size 1 \
 			--val-batch-size 8 \
 			--amp \
 			--loss-type gdl \
@@ -69,14 +70,14 @@ run_training() {
 run_model() {
 	log "Running model inference pipeline..."
 	(
-		python runmodel/main.py --model=unet --ckpt="checkpoints/${RUN_NAME}_unet_best.pt"
+		python runmodel/main.py --model=$MODEL --ckpt="checkpoints/${RUN_NAME}_${MODEL}_best.pt"
 	)
 }
 
 run_create_validation_visuals() {
 	log "Running validation visuals pipeline..."
 	(
-		python validation/main.py --model=unet
+		python validation/main.py --model=$MODEL
 	)
 }
 
@@ -92,7 +93,7 @@ main() {
 	log "Start time: ${start_time}"
 	activate_venv
 
-	run_preprocessing
+	# run_preprocessing
 	run_training
 	run_model
 	run_create_validation_visuals
