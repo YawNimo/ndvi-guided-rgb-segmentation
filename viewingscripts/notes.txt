@@ -1,0 +1,4 @@
+Triplet previews are ordered left to right as:
+1. RGB input
+2. Colored ground truth
+3. Colored predicted mask
