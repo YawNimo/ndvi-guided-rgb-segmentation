@@ -13,24 +13,21 @@ from utils import parse_args
 from common.io_utils import load_checkpoint
 from inference import inference_loop
 from visualization_utils import plot_triplets
-from common.constants import INPUT_IMAGES_SUBDIR, INPUT_MASKS_SUBDIR, OUTPUT_PRED_MASKS_SUBDIR
-
-
-
-
 if __name__ == "__main__":    
     # Parse CLI arguments, run inference, and optionally render triplet plots.
     args = parse_args()
     device = torch.device(args.device)
 
     tiles_base = Path(args.tiles_base)
-    img_dir = tiles_base / INPUT_IMAGES_SUBDIR
-    msk_dir = tiles_base / INPUT_MASKS_SUBDIR
+    img_dir = Path(args.images_dir) if args.images_dir else tiles_base / args.images_subdir
+    msk_dir = Path(args.masks_dir) if args.masks_dir else tiles_base / args.masks_subdir
 
     results_dir = Path(args.results_dir)
-    
-    
-    pred_dir = results_dir / args.model / OUTPUT_PRED_MASKS_SUBDIR
+
+    if args.pred_output_dir:
+        pred_dir = Path(args.pred_output_dir)
+    else:
+        pred_dir = results_dir / args.model / args.pred_subdir
     
     ckpt_path = Path(args.ckpt)
 
