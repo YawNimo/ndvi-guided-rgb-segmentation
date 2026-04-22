@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="/home/ehurd1@cfreg.local/ndvi-guided-rgb-segmentation"
 VENV_ACTIVATE="${ROOT_DIR}/venv/bin/activate"
 RUN_NAME="pipeline_best"
-MODEL="spanetfull"
+MODEL="unet"
 
 
 log() {
