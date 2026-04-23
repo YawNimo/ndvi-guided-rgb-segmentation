@@ -74,5 +74,32 @@ def parse_args():
     p.add_argument("--unet_encoder", type=str, default="resnet34")
     p.add_argument("--unet_weights", type=str, default="imagenet")
 
-    return p.parse_args()
+    p.add_argument(
+        "--inference-patch-size",
+        type=int,
+        default=0,
+        help="Sliding-window edge length in pixels (0 = single full-image forward). "
+        "If > 0, must be a multiple of 32 (UNet stride).",
+    )
+    p.add_argument(
+        "--inference-overlap",
+        type=int,
+        default=0,
+        help="Overlap between windows in pixels; must be < --inference-patch-size when patching.",
+    )
+
+    args = p.parse_args()
+    if args.inference_patch_size < 0:
+        p.error("--inference-patch-size must be >= 0")
+    if args.inference_overlap < 0:
+        p.error("--inference-overlap must be >= 0")
+    if args.inference_patch_size > 0:
+        if args.inference_patch_size % 32 != 0:
+            p.error("--inference-patch-size must be a multiple of 32 when non-zero")
+        if args.inference_overlap >= args.inference_patch_size:
+            p.error("--inference-overlap must be less than --inference-patch-size")
+    elif args.inference_overlap != 0:
+        p.error("--inference-overlap must be 0 when --inference-patch-size is 0")
+
+    return args
 

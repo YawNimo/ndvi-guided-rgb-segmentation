@@ -10,41 +10,36 @@ import tifffile
 from PIL import Image
 
 CLASS_COLOR_MAP: dict[int, tuple[int, int, int]] = {
-    0: (0, 255, 0),      # GREEN
-    1: (255, 165, 0),    # ORANGE
-    2: (0, 128, 0),      # DArk green
-    3: (0, 0, 255),        # BLUE
-    4: (128, 255, 128),        # LIGHT GREEN
+    0: (0, 0, 255),       # BLUE
+    1: (255, 165, 0),     # ORANGE
+    2: (128, 255, 128),   # LIGHT GREEN
+    3: (0, 128, 0),       # DARK GREEN
 }
 
 
 def parse_args() -> argparse.Namespace:
-    base_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(
-        description="Convert class-id TIFF masks (0/1/2) to color PNGs."
+        description="Convert mapped mask TIFF files to color PNG files."
     )
     parser.add_argument(
         "--input-dir",
         type=Path,
-        default=base_dir / "datasets" / "landcover_dataset" / "masks",
-        help="Directory containing input TIFF masks (default: landcover_dataset/masks)",
+        required=True,
+        help="Directory containing input TIFF masks.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=base_dir / "colored_pngs",
-        help="Directory where color PNGs will be written (default: landcover_verification/colored_pngs)",
-    )
-    parser.add_argument(
-        "--allow-unknown-labels",
-        action="store_true",
-        help="Allow labels outside {0,1,2}; unknown labels are rendered as black.",
+        required=True,
+        help="Directory where color PNGs will be written.",
     )
     return parser.parse_args()
 
 
 def _collect_tifs(directory: Path) -> list[Path]:
-    return sorted([p for p in directory.iterdir() if p.is_file() and p.suffix.lower() in {".tif", ".tiff"}])
+    return sorted(
+        [p for p in directory.iterdir() if p.is_file() and p.suffix.lower() in {".tif", ".tiff"}]
+    )
 
 
 def _load_mask(tif_path: Path) -> np.ndarray:
@@ -56,13 +51,20 @@ def _load_mask(tif_path: Path) -> np.ndarray:
     return arr.astype(np.uint8)
 
 
-def _colorize(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _colorize_with_validation(mask: np.ndarray, tif_path: Path) -> np.ndarray:
+    known = np.isin(mask, list(CLASS_COLOR_MAP.keys()))
+    if (~known).any():
+        unknown_labels = np.unique(mask[~known]).tolist()
+        labels_str = ", ".join(str(int(v)) for v in unknown_labels)
+        raise ValueError(
+            f"{tif_path.name} contains unmapped pixel classes: {labels_str}. "
+            f"Mapped classes are: {sorted(CLASS_COLOR_MAP.keys())}"
+        )
+
     rgb = np.zeros((*mask.shape, 3), dtype=np.uint8)
     for cls_id, color in CLASS_COLOR_MAP.items():
         rgb[mask == cls_id] = color
-    known = np.isin(mask, list(CLASS_COLOR_MAP.keys()))
-    unknown_labels = np.unique(mask[~known]) if (~known).any() else np.array([], dtype=mask.dtype)
-    return rgb, unknown_labels
+    return rgb
 
 
 def main() -> int:
@@ -86,17 +88,11 @@ def main() -> int:
 
     written = 0
     for tif_path in tif_paths:
-        if written >= 5:
-            break
-        mask = _load_mask(tif_path)
-        rgb, unknown_labels = _colorize(mask)
-        if unknown_labels.size > 0 and not args.allow_unknown_labels:
-            labels = ", ".join(str(int(v)) for v in unknown_labels.tolist())
-            print(
-                f"ERROR: {tif_path.name} contains unsupported labels: {labels}. "
-                "Use --allow-unknown-labels to continue (unknown labels become black).",
-                file=sys.stderr,
-            )
+        try:
+            mask = _load_mask(tif_path)
+            rgb = _colorize_with_validation(mask, tif_path)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
             return 1
 
         out_path = output_dir / f"{tif_path.stem}.png"
@@ -104,7 +100,7 @@ def main() -> int:
         written += 1
 
     print(f"Wrote {written} color PNGs to {output_dir}")
-    print("Color mapping: 0->blue, 1->orange, 2->green")
+    print("Color mapping: 0->blue, 1->orange, 2->light green, 3->dark green")
     return 0
 
 

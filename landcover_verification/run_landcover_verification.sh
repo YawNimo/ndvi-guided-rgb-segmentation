@@ -26,12 +26,16 @@ die() {
 [[ -d "${RGB_INPUT_DIR}" ]] || die "Missing RGB input directory: ${RGB_INPUT_DIR}"
 [[ -f "${CKPT_PATH}" ]] || die "Missing checkpoint: ${CKPT_PATH}"
 
+# Large RGB GeoTIFFs can OOM on a single full-GPU forward; sliding-window inference avoids that.
+# Fallback if VRAM is still tight: add --device cpu (slow but reliable).
 log "Step 1/4: Run runmodel inference to unmapped prediction masks"
 "${VENV_PYTHON}" "${ROOT_DIR}/runmodel/main.py" \
   --model "${MODEL}" \
   --ckpt "${CKPT_PATH}" \
   --images_dir "${RGB_INPUT_DIR}" \
-  --pred_output_dir "${UNMAPPED_PRED_DIR}"
+  --pred_output_dir "${UNMAPPED_PRED_DIR}" \
+  --inference-patch-size 960 \
+  --inference-overlap 128
 
 log "Step 2/4: Remap predicted masks"
 "${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/convert_pred_masks.py" \
@@ -47,10 +51,10 @@ else
   log "Step 3/4: Skip GT remap (already present at ${REMAPPED_GT_DIR})"
 fi
 
-log "Step 4/4: Score Dice between remapped predictions and GT"
-"${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/score_landcover_dice.py" \
+log "Step 4/4: Score F1 and IoU between remapped predictions and GT"
+"${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/score_landcover_metrics.py" \
   --pred-dir "${REMAPPED_PRED_DIR}" \
   --gt-dir "${REMAPPED_GT_DIR}" \
-  --out-csv "${ROOT_DIR}/landcover_verification/datasets/landcover_dice_scores.csv"
+  --out-csv "${ROOT_DIR}/landcover_verification/datasets/landcover_metrics_scores.csv"
 
 log "Landcover verification pipeline complete."

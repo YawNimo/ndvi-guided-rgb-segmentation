@@ -51,7 +51,10 @@ if __name__ == "__main__":
         img_dir=img_dir,
         pred_dir=pred_dir,
         model=model,
-        device=device
+        device=device,
+        inference_patch_size=args.inference_patch_size,
+        inference_overlap=args.inference_overlap,
+        num_classes=4,
     )
 
     # Visualization (only works up to a max of 3 tiles)
