@@ -6,22 +6,20 @@ The end-to-end path (mirrors `run_landcover_verification.sh`) runs inference on 
 
 ```mermaid
 flowchart TD
-  Start([Start]) --> Preflight{RGB image dir and checkpoint exist?}
+  Start([Start]) --> Preflight{venv python and raw input mask dir exist?}
   Preflight -->|no| Fail([Exit with error])
-  Preflight -->|yes| Infer[Step 1 runmodel/main.py, RGB images from landcover_dataset/images]
-  Infer --> Unmapped[unmapped_pred_masks]
-  Unmapped --> PredScript[Step 2 convert_pred_masks.py]
-  PredScript --> PredRemap[remap pred labels 0 to 0, 1 to 1, 2 to 2, 3 to 2]
-  PredRemap --> PredOut[remapped_pred_masks]
-  PredOut --> GtGate{remapped_landcover_masks missing or empty?}
-  GtGate -->|yes| RawGt[landcover_dataset masks]
-  RawGt --> GtScript[Step 3 convert_landcover_dataset.py]
-  GtScript --> GtRemap[remap GT labels 1 to 1, 2 to 2, 3 to 0, 4 to 1]
-  GtRemap --> GtOut[remapped_landcover_masks]
-  GtGate -->|no| SkipGt[Step 3 skip GT remap, reuse remapped_landcover_masks]
-  GtOut --> Metrics[Step 4 score_landcover_metrics.py, remapped_pred_masks vs remapped_landcover_masks to landcover_metrics_scores.csv]
-  SkipGt --> Metrics
+  Preflight -->|yes| GtScript[Step 1 convert_landcover_dataset.py]
+  GtScript --> GtRemap[write remapped_landcover_masks]
+  GtRemap --> RunGate{runmodel enabled?}
+  RunGate -->|yes| Infer[Step 2 runmodel/main.py on remapped_landcover_masks]
+  Infer --> PredOut[write predictions to datasets/pred_masks]
+  RunGate -->|no| SkipRun[skip via --skip-runmodel]
+  PredOut --> ScoreGate{scoring enabled?}
+  SkipRun --> ScoreGate
+  ScoreGate -->|yes| Metrics[Step 3 score_landcover_metrics.py, pred_masks vs remapped_landcover_masks]
+  ScoreGate -->|no| SkipScore[skip via --skip-score]
   Metrics --> Done([Verification complete])
+  SkipScore --> Done
 ```
 
 GT masks may also contain label 0, which is left unchanged by `convert_landcover_dataset.py`. For script examples, see **Mask Remap Entry Point** and **Prediction Mask Remap Entry Point** below.
