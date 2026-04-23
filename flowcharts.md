@@ -86,18 +86,10 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A([Start run_landcover_verification.sh]) --> B{venv python and raw mask dir exist?}
-    B -->|No| C([Exit with error])
-    B -->|Yes| D[Step 1: convert_landcover_dataset.py to remapped_landcover_masks]
-    D --> E{runmodel enabled?}
-    E -->|Yes| F[Step 2: runmodel/main.py on remapped_landcover_masks]
+    A([Start run_landcover_verification.sh]) --> D[Step 1: convert_landcover_dataset.py to remapped_landcover_masks]
+    D --> F[Step 2: runmodel/main.py on remapped_landcover_masks]
     F --> G[Write predictions to datasets/pred_masks]
-    E -->|No| H[Skip runmodel via --skip-runmodel]
-    G --> I{scoring enabled?}
-    H --> I
-    I -->|Yes| J[Step 3: score_landcover_metrics.py pred_masks vs remapped_landcover_masks]
+    G --> J[Step 3: score_landcover_metrics.py pred_masks vs remapped_landcover_masks]
     J --> K[Write landcover_metrics_scores.csv]
-    I -->|No| L[Skip scoring via --skip-score]
     K --> M([Verification complete])
-    L --> M
 ```

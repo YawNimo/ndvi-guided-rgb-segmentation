@@ -6,20 +6,12 @@ The end-to-end path (mirrors `run_landcover_verification.sh`) remaps LandCover.a
 
 ```mermaid
 flowchart TD
-  Start([Start]) --> Preflight{venv python and raw input mask dir exist?}
-  Preflight -->|no| Fail([Exit with error])
-  Preflight -->|yes| GtScript[Step 1 convert_landcover_dataset.py]
+  Start([Start]) --> GtScript[Step 1 convert_landcover_dataset.py]
   GtScript --> GtRemap[write remapped_landcover_masks]
-  GtRemap --> RunGate{runmodel enabled?}
-  RunGate -->|yes| Infer[Step 2 runmodel/main.py on remapped_landcover_masks]
+  GtRemap --> Infer[Step 2 runmodel/main.py on remapped_landcover_masks]
   Infer --> PredOut[write predictions to datasets/pred_masks]
-  RunGate -->|no| SkipRun[skip via --skip-runmodel]
-  PredOut --> ScoreGate{scoring enabled?}
-  SkipRun --> ScoreGate
-  ScoreGate -->|yes| Metrics[Step 3 score_landcover_metrics.py, pred_masks vs remapped_landcover_masks]
-  ScoreGate -->|no| SkipScore[skip via --skip-score]
+  PredOut --> Metrics[Step 3 score_landcover_metrics.py, pred_masks vs remapped_landcover_masks]
   Metrics --> Done([Verification complete])
-  SkipScore --> Done
 ```
 
 GT masks may also contain label 0, which is left unchanged by `convert_landcover_dataset.py`.
