@@ -2,7 +2,7 @@
 
 ## Pipeline flow
 
-The end-to-end path (mirrors `run_landcover_verification.sh`) runs inference on LandCover.ai RGB tiles, aligns label spaces between predictions and ground truth using the remap steps in the flowchart, then scores overlap with F1 and IoU. Manual steps use the same data directories without going through the shell script.
+The end-to-end path (mirrors `run_landcover_verification.sh`) remaps LandCover.ai masks, runs inference on those remapped masks, then scores overlap with F1 and IoU. Manual steps use the same data directories without going through the shell script.
 
 ```mermaid
 flowchart TD
@@ -22,7 +22,7 @@ flowchart TD
   SkipScore --> Done
 ```
 
-GT masks may also contain label 0, which is left unchanged by `convert_landcover_dataset.py`. For script examples, see **Mask Remap Entry Point** and **Prediction Mask Remap Entry Point** below.
+GT masks may also contain label 0, which is left unchanged by `convert_landcover_dataset.py`.
 
 ## Dataset Install
 
@@ -50,32 +50,15 @@ python landcover_verification/convert_landcover_dataset.py \
   --output-dir landcover_verification/datasets/remapped_landcover_masks
 ```
 
-## Prediction Mask Remap Entry Point
-
-Use `./landcover_verification/convert_pred_masks.py` to remap prediction labels:
-
-- `0 -> 0`
-- `1 -> 1`
-- `2 -> 2`
-- `3 -> 2`
-
-Example:
-
-```bash
-python landcover_verification/convert_pred_masks.py \
-  --input-dir results/unet/pred_masks \
-  --output-dir landcover_verification/datasets/remapped_pred_masks
-```
-
 ## F1 and IoU Scoring Entry Point
 
-Use `./landcover_verification/score_landcover_metrics.py` to compute F1 and IoU between remapped predictions and remapped landcover GT masks.
+Use `./landcover_verification/score_landcover_metrics.py` to compute F1 and IoU between predictions and remapped landcover input masks.
 
 Example:
 
 ```bash
 python landcover_verification/score_landcover_metrics.py \
-  --pred-dir landcover_verification/datasets/remapped_pred_masks \
+  --pred-dir landcover_verification/datasets/pred_masks \
   --gt-dir landcover_verification/datasets/remapped_landcover_masks \
   --out-csv landcover_verification/datasets/landcover_metrics_scores.csv
 ```
@@ -90,10 +73,17 @@ bash landcover_verification/run_landcover_verification.sh
 
 This script performs:
 
-1. `runmodel` inference with RGB input `landcover_verification/datasets/landcover_dataset/images` and output to `landcover_verification/datasets/unmapped_pred_masks`.
-2. Prediction remapping via `convert_pred_masks.py` into `landcover_verification/datasets/remapped_pred_masks`.
-3. Conditional GT remapping via `convert_landcover_dataset.py` if `landcover_verification/datasets/remapped_landcover_masks` is missing or empty.
-4. F1/IoU scoring via `score_landcover_metrics.py`.
+1. Remap input masks via `convert_landcover_dataset.py` into `landcover_verification/datasets/remapped_landcover_masks`.
+2. Run `runmodel/main.py` on `landcover_verification/datasets/remapped_landcover_masks` and write predictions to `landcover_verification/datasets/pred_masks`.
+3. Score F1/IoU via `score_landcover_metrics.py` using:
+   - `--pred-dir landcover_verification/datasets/pred_masks`
+   - `--gt-dir landcover_verification/datasets/remapped_landcover_masks`
+
+Optional flags:
+
+- `--skip-remap-input-masks`
+- `--skip-runmodel`
+- `--skip-score`
 
 ## New runmodel Path Args
 
