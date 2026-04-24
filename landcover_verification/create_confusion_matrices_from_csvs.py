@@ -83,15 +83,40 @@ def _iter_csv_pairs(csv_path: Path) -> list[tuple[str, Path, Path]]:
     rows: list[tuple[str, Path, Path]] = []
     with csv_path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
-        required = {"tile_id", "gt_path", "pred_path"}
-        missing = required - set(reader.fieldnames or [])
+        raw_fields = list(reader.fieldnames or [])
+        normalized_to_raw: dict[str, str] = {}
+        for field in raw_fields:
+            clean = (field or "").strip().lstrip("\ufeff")
+            if clean:
+                normalized_to_raw[clean] = field
+
+        resolved_cols: dict[str, str] = {}
+        for required_name in ("tile_id", "gt_path", "pred_path"):
+            if required_name in normalized_to_raw:
+                resolved_cols[required_name] = normalized_to_raw[required_name]
+                continue
+
+            # Fallback for malformed headers like "costile_id" while still
+            # ensuring we target a clearly related column name.
+            suffix_matches = [
+                raw
+                for clean, raw in normalized_to_raw.items()
+                if clean.endswith(required_name)
+            ]
+            if len(suffix_matches) == 1:
+                resolved_cols[required_name] = suffix_matches[0]
+
+        missing = [name for name in ("tile_id", "gt_path", "pred_path") if name not in resolved_cols]
         if missing:
-            raise ValueError(f"Missing required columns in {csv_path}: {sorted(missing)}")
+            raise ValueError(
+                f"Missing required columns in {csv_path}: {sorted(missing)}. "
+                f"Detected columns: {raw_fields}"
+            )
 
         for row in reader:
-            tile_id = (row.get("tile_id") or "").strip()
-            gt_str = (row.get("gt_path") or "").strip()
-            pred_str = (row.get("pred_path") or "").strip()
+            tile_id = (row.get(resolved_cols["tile_id"]) or "").strip()
+            gt_str = (row.get(resolved_cols["gt_path"]) or "").strip()
+            pred_str = (row.get(resolved_cols["pred_path"]) or "").strip()
             if not tile_id or tile_id == "__SUMMARY__":
                 continue
             if not gt_str or not pred_str:
