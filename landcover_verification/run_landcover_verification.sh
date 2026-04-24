@@ -9,11 +9,13 @@ RAW_GT_DIR="${ROOT_DIR}/landcover_verification/datasets/landcover_dataset/masks"
 RAW_RGB_DIR="${ROOT_DIR}/landcover_verification/datasets/landcover_dataset/images"
 TILED_RGB_DIR="${ROOT_DIR}/landcover_verification/datasets/tiled_images"
 REMAPPED_GT_DIR="${ROOT_DIR}/landcover_verification/datasets/remapped_landcover_masks"
-PRED_DIR="${ROOT_DIR}/landcover_verification/datasets/pred_masks"
-TRIPLET_DIR="${ROOT_DIR}/landcover_verification/datasets/triplet_comparisons"
+DATASETS_DIR="${ROOT_DIR}/landcover_verification/datasets"
+PRED_DIR_BASE="${DATASETS_DIR}/pred_masks"
+TRIPLET_DIR_BASE="${DATASETS_DIR}/triplet_comparisons"
 
 MODEL="unet"
-CKPT_PATH="${ROOT_DIR}/checkpoints/pipeline_best_unet_best.pt"
+CKPT_PATH=""
+CKPT_SET_BY_FLAG=0
 
 # Match normal runmodel defaults: full-tile forward unless explicitly overridden.
 INFERENCE_PATCH_SIZE="${LANDCOVER_INFERENCE_PATCH_SIZE:-0}"
@@ -48,6 +50,8 @@ Flags:
   --skip-triplets            Skip triplet PNG generation
   --no-clean-outputs         Do not clear old TIFF/PNG outputs before writing
   --runmodel-limit N         Limit number of input tiles for runmodel (default: 0, meaning all)
+  --model NAME               Model name to pass to runmodel (default: unet)
+  --ckpt PATH                Checkpoint path for runmodel (default: ${ROOT_DIR}/checkpoints/pipeline_best_<model>_best.pt)
   --triplet-limit N          Number of triplet PNGs to generate (default: 3, 0 = all)
   --tile-size N              Tile edge for RGB/GT slicing (default: 500, or \$LANDCOVER_TILE_SIZE)
   --inference-patch-size N  Sliding-window patch edge (default: 0, or \$LANDCOVER_INFERENCE_PATCH_SIZE).
@@ -98,6 +102,19 @@ while [[ $# -gt 0 ]]; do
       shift 2
       continue
       ;;
+    --model)
+      [[ $# -ge 2 ]] || die "--model requires a value"
+      MODEL="$2"
+      shift 2
+      continue
+      ;;
+    --ckpt)
+      [[ $# -ge 2 ]] || die "--ckpt requires a value"
+      CKPT_PATH="$2"
+      CKPT_SET_BY_FLAG=1
+      shift 2
+      continue
+      ;;
     --triplet-limit)
       [[ $# -ge 2 ]] || die "--triplet-limit requires a value"
       TRIPLET_LIMIT="$2"
@@ -131,6 +148,16 @@ done
 [[ -x "${VENV_PYTHON}" ]] || die "Missing venv python: ${VENV_PYTHON}"
 [[ -d "${RAW_GT_DIR}" ]] || die "Missing input mask directory: ${RAW_GT_DIR}"
 [[ -d "${RAW_RGB_DIR}" ]] || die "Missing input RGB directory: ${RAW_RGB_DIR}"
+[[ -n "${MODEL}" ]] || die "--model cannot be empty"
+
+# Keep per-model outputs isolated so repeated runs do not overwrite each other.
+MODEL_SAFE="${MODEL//[^[:alnum:]._-]/_}"
+PRED_DIR="${PRED_DIR_BASE}_${MODEL_SAFE}"
+TRIPLET_DIR="${TRIPLET_DIR_BASE}_${MODEL_SAFE}"
+METRICS_CSV="${DATASETS_DIR}/landcover_metrics_scores_${MODEL_SAFE}.csv"
+if [[ "${CKPT_SET_BY_FLAG}" -eq 0 ]]; then
+  CKPT_PATH="${ROOT_DIR}/checkpoints/pipeline_best_${MODEL_SAFE}_best.pt"
+fi
 
 clean_mask_tifs() {
   local dir="$1"
@@ -205,6 +232,8 @@ if [[ "${DO_RUNMODEL}" -eq 1 ]]; then
   fi
   log "Step 2/4: Run runmodel on tiled RGB -> ${PRED_DIR}"
   log "Runmodel limit: ${RUNMODEL_LIMIT} tile(s) (0 means all)"
+  log "Model: ${MODEL}"
+  log "Checkpoint: ${CKPT_PATH}"
   log "Inference (normal defaults): --inference-patch-size ${INFERENCE_PATCH_SIZE} --inference-overlap ${INFERENCE_OVERLAP}"
   "${VENV_PYTHON}" "${ROOT_DIR}/runmodel/main.py" \
     --model "${MODEL}" \
@@ -222,11 +251,11 @@ fi
 if [[ "${DO_SCORE}" -eq 1 ]]; then
   [[ -d "${PRED_DIR}" ]] || die "Missing prediction directory for scoring: ${PRED_DIR}"
   [[ -d "${REMAPPED_GT_DIR}" ]] || die "Missing remapped input mask directory for scoring: ${REMAPPED_GT_DIR}"
-  log "Step 3/4: Score F1 and IoU between pred masks and remapped input masks"
+  log "Step 3/4: Score F1 and IoU between pred masks and remapped input masks -> ${METRICS_CSV}"
   "${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/score_landcover_metrics.py" \
     --pred-dir "${PRED_DIR}" \
     --gt-dir "${REMAPPED_GT_DIR}" \
-    --out-csv "${ROOT_DIR}/landcover_verification/datasets/landcover_metrics_scores.csv"
+    --out-csv "${METRICS_CSV}"
 else
   log "Step 3/4: Skip scoring (--skip-score)"
 fi

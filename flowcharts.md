@@ -86,10 +86,18 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A([Start run_landcover_verification.sh]) --> D[Step 1: convert_landcover_dataset.py to remapped_landcover_masks]
-    D --> F[Step 2: runmodel/main.py on remapped_landcover_masks]
+    A([Start run_landcover_verification.sh]) --> C0[Clean tiled outputs by default]
+    C0 --> D[Step 1: tile_landcover_for_verification.py]
+    D --> D1[Write tiled RGB to datasets/tiled_images]
+    D --> D2[Write remapped GT to datasets/remapped_landcover_masks]
+    D2 --> C1[Clean pred outputs by default]
+    D1 --> F[Step 2: runmodel/main.py on tiled_images]
+    C1 --> F
     F --> G[Write predictions to datasets/pred_masks]
     G --> J[Step 3: score_landcover_metrics.py pred_masks vs remapped_landcover_masks]
     J --> K[Write landcover_metrics_scores.csv]
-    K --> M([Verification complete])
+    K --> C2[Clean triplet outputs by default]
+    C2 --> L[Step 4: compare_landcover_triplets.py]
+    L --> L1[Default triplets: --limit 3 --id-source pred]
+    L1 --> M([Verification complete])
 ```
