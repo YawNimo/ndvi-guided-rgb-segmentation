@@ -6,13 +6,22 @@ ROOT_DIR="/home/ehurd1@cfreg.local/ndvi-guided-rgb-segmentation"
 VENV_PYTHON="${ROOT_DIR}/venv/bin/python"
 
 RAW_GT_DIR="${ROOT_DIR}/landcover_verification/datasets/landcover_dataset/masks"
+RAW_RGB_DIR="${ROOT_DIR}/landcover_verification/datasets/landcover_dataset/images"
+TILED_RGB_DIR="${ROOT_DIR}/landcover_verification/datasets/tiled_images"
 REMAPPED_GT_DIR="${ROOT_DIR}/landcover_verification/datasets/remapped_landcover_masks"
 PRED_DIR="${ROOT_DIR}/landcover_verification/datasets/pred_masks"
 
 MODEL="unet"
 CKPT_PATH="${ROOT_DIR}/checkpoints/pipeline_best_unet_best.pt"
 
-DO_REMAP_INPUT_MASKS=1
+# Sliding-window inference: full-tile forward OOMs on ~9k tiles with typical 8GB GPUs.
+# Override via env or flags (see usage).
+INFERENCE_PATCH_SIZE="${LANDCOVER_INFERENCE_PATCH_SIZE:-1024}"
+INFERENCE_OVERLAP="${LANDCOVER_INFERENCE_OVERLAP:-256}"
+RUNMODEL_LIMIT="${LANDCOVER_RUNMODEL_LIMIT:-10}"
+TILE_SIZE="${LANDCOVER_TILE_SIZE:-1000}"
+
+DO_TILE=1
 DO_RUNMODEL=1
 DO_SCORE=1
 
@@ -30,23 +39,63 @@ usage() {
 Usage: bash landcover_verification/run_landcover_verification.sh [flags]
 
 Flags:
-  --skip-remap-input-masks   Skip remapping input masks
+  --skip-tile                Skip slicing RGB + remapping/slicing GT masks
   --skip-runmodel            Skip runmodel inference
   --skip-score               Skip F1/IoU scoring
+  --runmodel-limit N         Limit number of input tiles for runmodel (default: 10, 0 = all)
+  --tile-size N              Tile edge for RGB/GT slicing (default: 1000, or \$LANDCOVER_TILE_SIZE)
+  --inference-patch-size N  Sliding-window patch edge (default: 1024, or \$LANDCOVER_INFERENCE_PATCH_SIZE).
+                             0 = full-image forward (may CUDA OOM on large tiles). If > 0, must be multiple of 32.
+  --inference-overlap N     Window overlap in pixels (default: 256, or \$LANDCOVER_INFERENCE_OVERLAP).
+                             Must be < patch size when patch size > 0; must be 0 when patch size is 0.
   -h, --help                 Show this help text
+
+Environment (optional overrides for inference memory tuning):
+  LANDCOVER_INFERENCE_PATCH_SIZE   default 1024
+  LANDCOVER_INFERENCE_OVERLAP      default 256
+  LANDCOVER_RUNMODEL_LIMIT         default 10 (0 = all tiles)
+  LANDCOVER_TILE_SIZE              default 1000
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --skip-tile)
+      DO_TILE=0
+      ;;
     --skip-remap-input-masks)
-      DO_REMAP_INPUT_MASKS=0
+      # Backward-compatible alias for old flag name.
+      DO_TILE=0
       ;;
     --skip-runmodel)
       DO_RUNMODEL=0
       ;;
     --skip-score)
       DO_SCORE=0
+      ;;
+    --inference-patch-size)
+      [[ $# -ge 2 ]] || die "--inference-patch-size requires a value"
+      INFERENCE_PATCH_SIZE="$2"
+      shift 2
+      continue
+      ;;
+    --runmodel-limit)
+      [[ $# -ge 2 ]] || die "--runmodel-limit requires a value"
+      RUNMODEL_LIMIT="$2"
+      shift 2
+      continue
+      ;;
+    --tile-size)
+      [[ $# -ge 2 ]] || die "--tile-size requires a value"
+      TILE_SIZE="$2"
+      shift 2
+      continue
+      ;;
+    --inference-overlap)
+      [[ $# -ge 2 ]] || die "--inference-overlap requires a value"
+      INFERENCE_OVERLAP="$2"
+      shift 2
+      continue
       ;;
     -h|--help)
       usage
@@ -62,25 +111,63 @@ done
 
 [[ -x "${VENV_PYTHON}" ]] || die "Missing venv python: ${VENV_PYTHON}"
 [[ -d "${RAW_GT_DIR}" ]] || die "Missing input mask directory: ${RAW_GT_DIR}"
+[[ -d "${RAW_RGB_DIR}" ]] || die "Missing input RGB directory: ${RAW_RGB_DIR}"
 
-if [[ "${DO_REMAP_INPUT_MASKS}" -eq 1 ]]; then
-  log "Step 1/3: Remap input masks"
-  "${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/convert_landcover_dataset.py" \
-    --input-dir "${RAW_GT_DIR}" \
-    --output-dir "${REMAPPED_GT_DIR}"
+if [[ "${DO_RUNMODEL}" -eq 1 ]]; then
+  if [[ "${RUNMODEL_LIMIT}" -lt 0 ]]; then
+    die "--runmodel-limit / LANDCOVER_RUNMODEL_LIMIT must be >= 0"
+  fi
+fi
+
+if [[ "${DO_TILE}" -eq 1 ]]; then
+  if [[ "${TILE_SIZE}" -le 0 ]]; then
+    die "--tile-size / LANDCOVER_TILE_SIZE must be > 0"
+  fi
+fi
+
+if [[ "${DO_RUNMODEL}" -eq 1 ]]; then
+  if [[ "${INFERENCE_PATCH_SIZE}" -lt 0 ]]; then
+    die "--inference-patch-size / LANDCOVER_INFERENCE_PATCH_SIZE must be >= 0"
+  fi
+  if [[ "${INFERENCE_PATCH_SIZE}" -gt 0 ]]; then
+    if (( INFERENCE_PATCH_SIZE % 32 != 0 )); then
+      die "inference patch size must be a multiple of 32 when non-zero (got ${INFERENCE_PATCH_SIZE})"
+    fi
+    if [[ "${INFERENCE_OVERLAP}" -ge "${INFERENCE_PATCH_SIZE}" ]]; then
+      die "inference overlap must be < patch size (patch=${INFERENCE_PATCH_SIZE}, overlap=${INFERENCE_OVERLAP})"
+    fi
+  elif [[ "${INFERENCE_OVERLAP}" -ne 0 ]]; then
+    die "inference overlap must be 0 when patch size is 0"
+  fi
+fi
+
+if [[ "${DO_TILE}" -eq 1 ]]; then
+  log "Step 1/3: Slice RGB and remap/slice GT masks"
+  "${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/tile_landcover_for_verification.py" \
+    --images-dir "${RAW_RGB_DIR}" \
+    --masks-dir "${RAW_GT_DIR}" \
+    --out-images-dir "${TILED_RGB_DIR}" \
+    --out-remapped-masks-dir "${REMAPPED_GT_DIR}" \
+    --tile-size "${TILE_SIZE}"
 else
-  log "Step 1/3: Skip remapping input masks (--skip-remap-input-masks)"
+  log "Step 1/3: Skip tiling/remap (--skip-tile)"
 fi
 
 if [[ "${DO_RUNMODEL}" -eq 1 ]]; then
   [[ -f "${CKPT_PATH}" ]] || die "Missing checkpoint: ${CKPT_PATH}"
+  [[ -d "${TILED_RGB_DIR}" ]] || die "Missing tiled RGB directory: ${TILED_RGB_DIR}"
   [[ -d "${REMAPPED_GT_DIR}" ]] || die "Missing remapped input mask directory: ${REMAPPED_GT_DIR}"
-  log "Step 2/3: Run runmodel on remapped masks -> ${PRED_DIR}"
+  log "Step 2/3: Run runmodel on tiled RGB -> ${PRED_DIR}"
+  log "Runmodel limit: ${RUNMODEL_LIMIT} tile(s) (0 means all)"
+  log "Inference: --inference-patch-size ${INFERENCE_PATCH_SIZE} --inference-overlap ${INFERENCE_OVERLAP}"
   "${VENV_PYTHON}" "${ROOT_DIR}/runmodel/main.py" \
     --model "${MODEL}" \
     --ckpt "${CKPT_PATH}" \
-    --images_dir "${REMAPPED_GT_DIR}" \
-    --pred_output_dir "${PRED_DIR}"
+    --images_dir "${TILED_RGB_DIR}" \
+    --pred_output_dir "${PRED_DIR}" \
+    --limit "${RUNMODEL_LIMIT}" \
+    --inference-patch-size "${INFERENCE_PATCH_SIZE}" \
+    --inference-overlap "${INFERENCE_OVERLAP}"
 else
   log "Step 2/3: Skip runmodel (--skip-runmodel)"
 fi

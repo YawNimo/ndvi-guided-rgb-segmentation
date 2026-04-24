@@ -6,9 +6,11 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
-REMAP: dict[int, int] = {1: 1, 2: 2, 3: 0, 4: 1}
+from remap_constants import LANDCOVER_CLASS_MAPPING
+
+REMAP: dict[int, int] = LANDCOVER_CLASS_MAPPING
 EXPECTED_INPUT_LABELS: set[int] = {0, 1, 2, 3, 4}
-EXPECTED_OUTPUT_LABELS: set[int] = {0, 1, 2}
+EXPECTED_OUTPUT_LABELS: set[int] = set(LANDCOVER_CLASS_MAPPING.values())
 
 
 def collect_tif_files(input_dir: Path) -> list[Path]:

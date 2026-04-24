@@ -13,14 +13,7 @@ from landcover_remap import (
     summarize_counts,
     validate_labels,
 )
-
-CLASS_MAPPING: dict[int, int] = {
-    0: 2,
-    1: 1,
-    2: 3,
-    3: 0,
-    4: 2,
-}
+from remap_constants import LANDCOVER_CLASS_MAPPING
 
 
 def parse_args() -> argparse.Namespace:
@@ -89,16 +82,16 @@ def main() -> int:
     if unexpected_labels:
         print(f"Warning: unexpected labels observed: {sorted(unexpected_labels)}")
 
-    unmapped_labels = input_labels - set(CLASS_MAPPING.keys())
+    unmapped_labels = input_labels - set(LANDCOVER_CLASS_MAPPING.keys())
     if unmapped_labels:
         print(
             "ERROR: Found input labels with no mapping: "
-            f"{sorted(unmapped_labels)}; mapping defines {sorted(CLASS_MAPPING.keys())}",
+            f"{sorted(unmapped_labels)}; mapping defines {sorted(LANDCOVER_CLASS_MAPPING.keys())}",
             file=sys.stderr,
         )
         return 1
 
-    unused_mapped_labels = set(CLASS_MAPPING.keys()) - input_labels
+    unused_mapped_labels = set(LANDCOVER_CLASS_MAPPING.keys()) - input_labels
     if unused_mapped_labels:
         print(
             "Warning: mapped input labels not observed in this batch: "
@@ -109,7 +102,7 @@ def main() -> int:
         print("Preflight complete. No files written (--preflight-only).")
         return 0
 
-    processed = remap_and_write_masks_with_mapping(mask_paths, output_dir, CLASS_MAPPING)
+    processed = remap_and_write_masks_with_mapping(mask_paths, output_dir, LANDCOVER_CLASS_MAPPING)
     print(f"Wrote {processed} remapped masks to {output_dir}")
 
     output_paths = collect_tif_files(output_dir)
@@ -118,7 +111,7 @@ def main() -> int:
     print(f"Output labels: {sorted(output_labels)}")
     print(f"Output counts: {summarize_counts(output_counts)}")
 
-    expected_output_labels = set(CLASS_MAPPING.values())
+    expected_output_labels = set(LANDCOVER_CLASS_MAPPING.values())
     invalid_output_labels = output_labels - expected_output_labels
     if invalid_output_labels:
         print(
