@@ -3,7 +3,7 @@
 
 This prepares verification inputs aligned with the main pipeline tiling style:
 - tile naming: ``{stem}_tile_{i}.tif`` (row-major)
-- tile size: defaults to preprocessing MAX_TILE_SIZE (1000)
+- tile size: defaults to 500 for verification runs
 - mask labels: remapped to model class order before scoring
 """
 
@@ -27,8 +27,9 @@ if str(ROOT_DIR) not in sys.path:
 
 from landcover_remap import EXPECTED_INPUT_LABELS, validate_labels
 from remap_constants import LANDCOVER_CLASS_MAPPING
-from preprocessing.env_vars import MAX_TILE_SIZE
 from preprocessing.utils.create_tiles import split_into_tiles
+
+DEFAULT_TILE_SIZE = 500
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,8 +64,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tile-size",
         type=int,
-        default=MAX_TILE_SIZE,
-        help=f"Tile edge length in pixels (default: {MAX_TILE_SIZE}).",
+        default=DEFAULT_TILE_SIZE,
+        help=f"Tile edge length in pixels (default: {DEFAULT_TILE_SIZE}).",
     )
     parser.add_argument(
         "--allow-extra-labels",

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Step 3 of landcover verification: score predictions vs remapped GT.
+"""Step 3 of landcover verification: score predictions vs remapped GT tiles.
 
-The pipeline writes remapped masks to ``datasets/remapped_landcover_masks`` and
-``runmodel/main.py`` writes predictions to ``datasets/pred_masks`` with four
-semantic classes (same as ``num_classes=4`` in training/inference). This
+The pipeline writes tiled remapped masks to
+``datasets/remapped_landcover_masks`` and ``runmodel/main.py`` writes
+predictions to ``datasets/pred_masks`` with four semantic classes (same as
+``num_classes=4`` in training/inference). This
 script pairs tiles by stem, computes per-class F1/IoU and macro averages, and
 writes a CSV. Override ``--pred-dir`` / ``--gt-dir`` if you use different
 directories.
@@ -27,7 +28,7 @@ if str(ROOT_DIR) not in sys.path:
 from validation.metrics import multiclass_f1_iou  # noqa: E402
 
 # Matches ``runmodel/main.py`` / ``build_model(..., num_classes=4)`` and
-# remapped LandCover.ai labels after ``convert_landcover_dataset.py`` (0–3).
+# remapped LandCover.ai labels after ``tile_landcover_for_verification.py`` (0–3).
 DEFAULT_NUM_CLASSES = 4
 
 

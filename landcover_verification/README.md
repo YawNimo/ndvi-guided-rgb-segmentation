@@ -13,11 +13,11 @@ flowchart TD
   Runmodel -->|"Default smoke test: --limit 10"| PredOut["Write predictions (datasets/pred_masks)"]
   PredOut --> Score["Step3: score_landcover_metrics.py"]
   GtRemap --> Score
-  Score --> Triplets["Optional: compare_landcover_triplets.py"]
+  Score --> Triplets["Step4: compare_landcover_triplets.py (default --limit 3)"]
   Triplets --> Done([Verification complete])
 ```
 
-GT masks may also contain label 0, which is left unchanged by `convert_landcover_dataset.py`.
+GT masks may also contain label 0, which is remapped during tiled preprocessing.
 
 ## Dataset Install
 
@@ -50,12 +50,12 @@ python landcover_verification/tile_landcover_for_verification.py \
   --masks-dir landcover_verification/datasets/landcover_dataset/masks \
   --out-images-dir landcover_verification/datasets/tiled_images \
   --out-remapped-masks-dir landcover_verification/datasets/remapped_landcover_masks \
-  --tile-size 1000
+  --tile-size 500
 ```
 
 ## F1 and IoU Scoring Entry Point
 
-Use `./landcover_verification/score_landcover_metrics.py` to compute F1 and IoU between predictions and remapped landcover input masks.
+Use `./landcover_verification/score_landcover_metrics.py` to compute F1 and IoU between predictions and tiled remapped GT masks.
 
 Example:
 
@@ -68,7 +68,9 @@ python landcover_verification/score_landcover_metrics.py \
 
 ## Visual Triplet Comparison (RGB, GT, Pred)
 
-Use `./landcover_verification/compare_landcover_triplets.py` to generate per-tile PNG montages:
+Use `./landcover_verification/compare_landcover_triplets.py` to generate per-tile PNG montages.
+
+`run_landcover_verification.sh` runs this automatically as step 4 and writes 3 triplets by default.
 
 - Left panel: original RGB tile
 - Middle panel: colored remapped GT mask
@@ -106,17 +108,26 @@ This script performs:
    - `landcover_verification/datasets/remapped_landcover_masks`
 2. Run `runmodel/main.py` on `landcover_verification/datasets/tiled_images` and write predictions to `landcover_verification/datasets/pred_masks` using **sliding-window inference** (defaults: patch `1024`, overlap `256`).
    - Default quick test: `--limit 10` tiles.
+   - `runmodel` receives both tiled RGB (`--images_dir`) and tiled remapped GT (`--masks_dir`).
 3. Score F1/IoU via `score_landcover_metrics.py` using:
    - `--pred-dir landcover_verification/datasets/pred_masks`
    - `--gt-dir landcover_verification/datasets/remapped_landcover_masks`
+4. Generate tile triplets via `compare_landcover_triplets.py` using:
+   - `--images-dir landcover_verification/datasets/tiled_images`
+   - `--gt-dir landcover_verification/datasets/remapped_landcover_masks`
+   - `--pred-dir landcover_verification/datasets/pred_masks`
+   - `--output-dir landcover_verification/datasets/triplet_comparisons`
+   - `--limit 3` (default)
 
 Optional flags:
 
 - `--skip-tile`
 - `--skip-runmodel`
 - `--skip-score`
+- `--skip-triplets`
 - `--runmodel-limit N` (default `10`, set `0` for all tiles)
-- `--tile-size N` (default `1000`)
+- `--triplet-limit N` (default `3`, set `0` for all matched tiles)
+- `--tile-size N` (default `500`)
 - `--inference-patch-size N` — sliding-window edge length in pixels (default `1024`). Use `0` only if you want a single full-image forward (often **CUDA OOM** on landcover-sized tiles).
 - `--inference-overlap N` — overlap between windows (default `256`). Must be less than patch size when patch size is greater than `0`; must be `0` when patch size is `0`.
 
