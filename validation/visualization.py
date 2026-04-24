@@ -80,6 +80,7 @@ def plot_confusion_matrix(
     conf_mat: np.ndarray,
     class_names: list[str],
     normalize: bool = True,
+    normalized_decimals: int = 8,
 ) -> None:
     """Save confusion matrix heatmap, optionally row-normalized."""
     data = conf_mat.astype(np.float64)
@@ -101,7 +102,11 @@ def plot_confusion_matrix(
     threshold = data.max() * 0.6 if data.size > 0 else 0.0
     for r in range(data.shape[0]):
         for c in range(data.shape[1]):
-            text_val = f"{data[r, c]:.2f}" if normalize else str(int(conf_mat[r, c]))
+            text_val = (
+                f"{data[r, c]:.{normalized_decimals}f}"
+                if normalize
+                else str(int(conf_mat[r, c]))
+            )
             ax.text(c, r, text_val, ha="center", va="center", color=("white" if data[r, c] > threshold else "black"))
 
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
