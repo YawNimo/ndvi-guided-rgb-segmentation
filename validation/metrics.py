@@ -36,6 +36,50 @@ def multiclass_dice(gt: np.ndarray, pred: np.ndarray, num_classes: int) -> tuple
     return macro, class_dice
 
 
+def f1_for_class(gt: np.ndarray, pred: np.ndarray, class_idx: int) -> float:
+    """Compute F1 score for a single class index.
+
+    For one-vs-rest semantic segmentation masks, this is equivalent to Dice.
+    """
+    gt_bin = gt == class_idx
+    pred_bin = pred == class_idx
+
+    tp = int(np.logical_and(gt_bin, pred_bin).sum())
+    fp = int(np.logical_and(~gt_bin, pred_bin).sum())
+    fn = int(np.logical_and(gt_bin, ~pred_bin).sum())
+
+    if tp == 0 and fp == 0 and fn == 0:
+        return 1.0
+
+    denom = (2 * tp) + fp + fn
+    if denom == 0:
+        return 0.0
+    return float((2.0 * tp) / denom)
+
+
+def iou_for_class(gt: np.ndarray, pred: np.ndarray, class_idx: int) -> float:
+    """Compute intersection-over-union score for a single class index."""
+    gt_bin = gt == class_idx
+    pred_bin = pred == class_idx
+
+    intersection = int(np.logical_and(gt_bin, pred_bin).sum())
+    union = int(np.logical_or(gt_bin, pred_bin).sum())
+    if union == 0:
+        return 1.0
+    return float(intersection / union)
+
+
+def multiclass_f1_iou(
+    gt: np.ndarray, pred: np.ndarray, num_classes: int
+) -> tuple[float, list[float], float, list[float]]:
+    """Compute macro/per-class F1 and IoU across classes."""
+    class_f1 = [f1_for_class(gt, pred, c) for c in range(num_classes)]
+    class_iou = [iou_for_class(gt, pred, c) for c in range(num_classes)]
+    macro_f1 = float(np.mean(class_f1))
+    macro_iou = float(np.mean(class_iou))
+    return macro_f1, class_f1, macro_iou, class_iou
+
+
 def confusion_matrix_update(conf_mat: np.ndarray, gt: np.ndarray, pred: np.ndarray, num_classes: int) -> None:
     """Accumulate one batch of predictions into a confusion matrix."""
     valid = (gt >= 0) & (gt < num_classes)
