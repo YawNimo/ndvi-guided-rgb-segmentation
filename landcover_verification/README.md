@@ -6,14 +6,18 @@ The end-to-end path (mirrors `run_landcover_verification.sh`) slices RGB/masks i
 
 ```mermaid
 flowchart TD
-  Start([Start]) --> TileScript["Step1: tile_landcover_for_verification.py"]
+  Start([Start]) --> CleanTile["Clean tile outputs (default)"]
+  CleanTile --> TileScript["Step1: tile_landcover_for_verification.py"]
   TileScript --> RgbTiles["Write tiled RGB (datasets/tiled_images)"]
   TileScript --> GtRemap["Write remapped GT tiles (datasets/remapped_landcover_masks)"]
+  GtRemap --> CleanPred["Clean pred outputs (default)"]
   RgbTiles --> Runmodel["Step2: runmodel/main.py"]
-  Runmodel -->|"Default smoke test: --limit 10"| PredOut["Write predictions (datasets/pred_masks)"]
+  CleanPred --> Runmodel
+  Runmodel -->|"Default full run: --limit 0, patch 0, overlap 0"| PredOut["Write predictions (datasets/pred_masks)"]
   PredOut --> Score["Step3: score_landcover_metrics.py"]
   GtRemap --> Score
-  Score --> Triplets["Step4: compare_landcover_triplets.py (default --limit 3)"]
+  Score --> CleanTrip["Clean triplet outputs (default)"]
+  CleanTrip --> Triplets["Step4: compare_landcover_triplets.py (default --limit 3, --id-source pred)"]
   Triplets --> Done([Verification complete])
 ```
 
@@ -71,6 +75,8 @@ python landcover_verification/score_landcover_metrics.py \
 Use `./landcover_verification/compare_landcover_triplets.py` to generate per-tile PNG montages.
 
 `run_landcover_verification.sh` runs this automatically as step 4 and writes 3 triplets by default.
+The script cleans old outputs by default to avoid stale-file mismatches, and triplet generation fails on any missing counterpart.
+The script uses predicted IDs as the triplet source (`--id-source pred`), then still fails if RGB/GT is missing for those predicted tiles.
 
 - Left panel: original RGB tile
 - Middle panel: colored remapped GT mask
@@ -84,12 +90,14 @@ python landcover_verification/compare_landcover_triplets.py \
   --gt-dir landcover_verification/datasets/remapped_landcover_masks \
   --pred-dir landcover_verification/datasets/pred_masks \
   --output-dir landcover_verification/datasets/triplet_comparisons \
+  --id-source pred \
   --max-side 2048
 ```
 
 Useful options:
 
 - `--limit N` for quick smoke tests on first `N` matched stems.
+- `--id-source {union,intersection,pred,rgb,gt}` to choose which stem set drives validation.
 - `--skip-missing` to skip stems where one of RGB/GT/pred is absent.
 - `--max-side 0` to disable resizing (full-resolution output).
 
@@ -106,8 +114,8 @@ This script performs:
 1. Tile RGB and tile+remap GT via `tile_landcover_for_verification.py` into:
    - `landcover_verification/datasets/tiled_images`
    - `landcover_verification/datasets/remapped_landcover_masks`
-2. Run `runmodel/main.py` on `landcover_verification/datasets/tiled_images` and write predictions to `landcover_verification/datasets/pred_masks` using **sliding-window inference** (defaults: patch `1024`, overlap `256`).
-   - Default quick test: `--limit 10` tiles.
+2. Run `runmodel/main.py` on `landcover_verification/datasets/tiled_images` and write predictions to `landcover_verification/datasets/pred_masks` with standard runmodel defaults (patch `0`, overlap `0`).
+   - Default full run: `--limit 0` (all tiles).
    - `runmodel` receives both tiled RGB (`--images_dir`) and tiled remapped GT (`--masks_dir`).
 3. Score F1/IoU via `score_landcover_metrics.py` using:
    - `--pred-dir landcover_verification/datasets/pred_masks`
@@ -118,6 +126,8 @@ This script performs:
    - `--pred-dir landcover_verification/datasets/pred_masks`
    - `--output-dir landcover_verification/datasets/triplet_comparisons`
    - `--limit 3` (default)
+   - `--id-source pred`
+   - strict validation: fails if any selected predicted tile is missing RGB or GT
 
 Optional flags:
 
@@ -125,15 +135,14 @@ Optional flags:
 - `--skip-runmodel`
 - `--skip-score`
 - `--skip-triplets`
-- `--runmodel-limit N` (default `10`, set `0` for all tiles)
+- `--no-clean-outputs` (keep existing TIFF/PNG outputs; default behavior is to clear stale outputs before each write step)
+- `--runmodel-limit N` (default `0`, meaning all tiles)
 - `--triplet-limit N` (default `3`, set `0` for all matched tiles)
 - `--tile-size N` (default `500`)
-- `--inference-patch-size N` — sliding-window edge length in pixels (default `1024`). Use `0` only if you want a single full-image forward (often **CUDA OOM** on landcover-sized tiles).
-- `--inference-overlap N` — overlap between windows (default `256`). Must be less than patch size when patch size is greater than `0`; must be `0` when patch size is `0`.
+- `--inference-patch-size N` — sliding-window edge length in pixels (default `0`).
+- `--inference-overlap N` — overlap between windows (default `0`). Must be less than patch size when patch size is greater than `0`; must be `0` when patch size is `0`.
 
-**CUDA OOM:** Full-tile inference (`--inference-patch-size 0` in `runmodel`) loads the entire ~9k×9k raster through the U-Net encoder; activations exceed typical 8&nbsp;GB GPUs. The verification script therefore passes patched inference by default.
-
-**Tuning memory:** If inference still OOMs, lower patch size (must be a multiple of `32`) and overlap proportionally, e.g. `768` / `192` or `512` / `128`:
+If you want sliding-window inference, set patch/overlap explicitly (patch must be a multiple of `32`), e.g. `768` / `192` or `512` / `128`:
 
 ```bash
 LANDCOVER_INFERENCE_PATCH_SIZE=768 LANDCOVER_INFERENCE_OVERLAP=192 \

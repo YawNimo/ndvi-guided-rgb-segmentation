@@ -97,6 +97,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip stems that are missing one or more counterparts.",
     )
+    parser.add_argument(
+        "--id-source",
+        type=str,
+        default="union",
+        choices=["union", "intersection", "pred", "rgb", "gt"],
+        help=(
+            "How to choose candidate tile IDs before counterpart validation: "
+            "union (default), intersection, or from one directory."
+        ),
+    )
     args = parser.parse_args()
     if args.max_side < 0:
         parser.error("--max-side must be >= 0")
@@ -214,12 +224,33 @@ def _compose_horizontal(rgb: np.ndarray, gt: np.ndarray, pred: np.ndarray) -> Im
     return canvas
 
 
-def _collect_triplets(images_dir: Path, gt_dir: Path, pred_dir: Path, skip_missing: bool) -> tuple[list[Triplet], list[str]]:
+def _collect_triplets(
+    images_dir: Path,
+    gt_dir: Path,
+    pred_dir: Path,
+    skip_missing: bool,
+    id_source: str,
+) -> tuple[list[Triplet], list[str]]:
     rgb_lookup = _lookup(images_dir)
     gt_lookup = _lookup(gt_dir)
     pred_lookup = _lookup(pred_dir)
 
-    tile_ids = sorted(set(rgb_lookup) | set(gt_lookup) | set(pred_lookup))
+    rgb_ids = set(rgb_lookup)
+    gt_ids = set(gt_lookup)
+    pred_ids = set(pred_lookup)
+    if id_source == "union":
+        tile_ids = sorted(rgb_ids | gt_ids | pred_ids)
+    elif id_source == "intersection":
+        tile_ids = sorted(rgb_ids & gt_ids & pred_ids)
+    elif id_source == "pred":
+        tile_ids = sorted(pred_ids)
+    elif id_source == "rgb":
+        tile_ids = sorted(rgb_ids)
+    elif id_source == "gt":
+        tile_ids = sorted(gt_ids)
+    else:  # pragma: no cover - argparse choices should prevent this.
+        raise ValueError(f"Unsupported --id-source value: {id_source}")
+
     triplets: list[Triplet] = []
     skipped: list[str] = []
 
@@ -263,6 +294,7 @@ def main() -> int:
             gt_dir=args.gt_dir,
             pred_dir=args.pred_dir,
             skip_missing=args.skip_missing,
+            id_source=args.id_source,
         )
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

@@ -15,11 +15,10 @@ TRIPLET_DIR="${ROOT_DIR}/landcover_verification/datasets/triplet_comparisons"
 MODEL="unet"
 CKPT_PATH="${ROOT_DIR}/checkpoints/pipeline_best_unet_best.pt"
 
-# Sliding-window inference: full-tile forward OOMs on ~9k tiles with typical 8GB GPUs.
-# Override via env or flags (see usage).
-INFERENCE_PATCH_SIZE="${LANDCOVER_INFERENCE_PATCH_SIZE:-1024}"
-INFERENCE_OVERLAP="${LANDCOVER_INFERENCE_OVERLAP:-256}"
-RUNMODEL_LIMIT="${LANDCOVER_RUNMODEL_LIMIT:-10}"
+# Match normal runmodel defaults: full-tile forward unless explicitly overridden.
+INFERENCE_PATCH_SIZE="${LANDCOVER_INFERENCE_PATCH_SIZE:-0}"
+INFERENCE_OVERLAP="${LANDCOVER_INFERENCE_OVERLAP:-0}"
+RUNMODEL_LIMIT="${LANDCOVER_RUNMODEL_LIMIT:-0}"
 TILE_SIZE="${LANDCOVER_TILE_SIZE:-500}"
 TRIPLET_LIMIT="${LANDCOVER_TRIPLET_LIMIT:-3}"
 
@@ -27,6 +26,7 @@ DO_TILE=1
 DO_RUNMODEL=1
 DO_SCORE=1
 DO_TRIPLETS=1
+CLEAN_OUTPUTS=1
 
 log() {
   echo "[run_landcover_verification] $*"
@@ -46,19 +46,20 @@ Flags:
   --skip-runmodel            Skip runmodel inference
   --skip-score               Skip F1/IoU scoring
   --skip-triplets            Skip triplet PNG generation
-  --runmodel-limit N         Limit number of input tiles for runmodel (default: 10, 0 = all)
+  --no-clean-outputs         Do not clear old TIFF/PNG outputs before writing
+  --runmodel-limit N         Limit number of input tiles for runmodel (default: 0, meaning all)
   --triplet-limit N          Number of triplet PNGs to generate (default: 3, 0 = all)
   --tile-size N              Tile edge for RGB/GT slicing (default: 500, or \$LANDCOVER_TILE_SIZE)
-  --inference-patch-size N  Sliding-window patch edge (default: 1024, or \$LANDCOVER_INFERENCE_PATCH_SIZE).
-                             0 = full-image forward (may CUDA OOM on large tiles). If > 0, must be multiple of 32.
-  --inference-overlap N     Window overlap in pixels (default: 256, or \$LANDCOVER_INFERENCE_OVERLAP).
+  --inference-patch-size N  Sliding-window patch edge (default: 0, or \$LANDCOVER_INFERENCE_PATCH_SIZE).
+                             0 = full-image forward. If > 0, must be multiple of 32.
+  --inference-overlap N     Window overlap in pixels (default: 0, or \$LANDCOVER_INFERENCE_OVERLAP).
                              Must be < patch size when patch size > 0; must be 0 when patch size is 0.
   -h, --help                 Show this help text
 
-Environment (optional overrides for inference memory tuning):
-  LANDCOVER_INFERENCE_PATCH_SIZE   default 1024
-  LANDCOVER_INFERENCE_OVERLAP      default 256
-  LANDCOVER_RUNMODEL_LIMIT         default 10 (0 = all tiles)
+Environment (optional overrides):
+  LANDCOVER_INFERENCE_PATCH_SIZE   default 0
+  LANDCOVER_INFERENCE_OVERLAP      default 0
+  LANDCOVER_RUNMODEL_LIMIT         default 0 (all tiles)
   LANDCOVER_TRIPLET_LIMIT          default 3 (0 = all matched tiles)
   LANDCOVER_TILE_SIZE              default 500
 EOF
@@ -81,6 +82,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-triplets)
       DO_TRIPLETS=0
+      ;;
+    --no-clean-outputs)
+      CLEAN_OUTPUTS=0
       ;;
     --inference-patch-size)
       [[ $# -ge 2 ]] || die "--inference-patch-size requires a value"
@@ -128,6 +132,18 @@ done
 [[ -d "${RAW_GT_DIR}" ]] || die "Missing input mask directory: ${RAW_GT_DIR}"
 [[ -d "${RAW_RGB_DIR}" ]] || die "Missing input RGB directory: ${RAW_RGB_DIR}"
 
+clean_mask_tifs() {
+  local dir="$1"
+  mkdir -p "${dir}"
+  rm -f "${dir}"/*.tif "${dir}"/*.tiff
+}
+
+clean_pngs() {
+  local dir="$1"
+  mkdir -p "${dir}"
+  rm -f "${dir}"/*.png
+}
+
 if [[ "${DO_RUNMODEL}" -eq 1 ]]; then
   if [[ "${RUNMODEL_LIMIT}" -lt 0 ]]; then
     die "--runmodel-limit / LANDCOVER_RUNMODEL_LIMIT must be >= 0"
@@ -163,6 +179,11 @@ if [[ "${DO_RUNMODEL}" -eq 1 ]]; then
 fi
 
 if [[ "${DO_TILE}" -eq 1 ]]; then
+  if [[ "${CLEAN_OUTPUTS}" -eq 1 ]]; then
+    log "Cleaning tiled outputs before step 1"
+    clean_mask_tifs "${TILED_RGB_DIR}"
+    clean_mask_tifs "${REMAPPED_GT_DIR}"
+  fi
   log "Step 1/4: Slice RGB and remap/slice GT masks"
   "${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/tile_landcover_for_verification.py" \
     --images-dir "${RAW_RGB_DIR}" \
@@ -178,9 +199,13 @@ if [[ "${DO_RUNMODEL}" -eq 1 ]]; then
   [[ -f "${CKPT_PATH}" ]] || die "Missing checkpoint: ${CKPT_PATH}"
   [[ -d "${TILED_RGB_DIR}" ]] || die "Missing tiled RGB directory: ${TILED_RGB_DIR}"
   [[ -d "${REMAPPED_GT_DIR}" ]] || die "Missing remapped input mask directory: ${REMAPPED_GT_DIR}"
+  if [[ "${CLEAN_OUTPUTS}" -eq 1 ]]; then
+    log "Cleaning prediction outputs before step 2"
+    clean_mask_tifs "${PRED_DIR}"
+  fi
   log "Step 2/4: Run runmodel on tiled RGB -> ${PRED_DIR}"
   log "Runmodel limit: ${RUNMODEL_LIMIT} tile(s) (0 means all)"
-  log "Inference: --inference-patch-size ${INFERENCE_PATCH_SIZE} --inference-overlap ${INFERENCE_OVERLAP}"
+  log "Inference (normal defaults): --inference-patch-size ${INFERENCE_PATCH_SIZE} --inference-overlap ${INFERENCE_OVERLAP}"
   "${VENV_PYTHON}" "${ROOT_DIR}/runmodel/main.py" \
     --model "${MODEL}" \
     --ckpt "${CKPT_PATH}" \
@@ -210,13 +235,19 @@ if [[ "${DO_TRIPLETS}" -eq 1 ]]; then
   [[ -d "${TILED_RGB_DIR}" ]] || die "Missing tiled RGB directory for triplets: ${TILED_RGB_DIR}"
   [[ -d "${REMAPPED_GT_DIR}" ]] || die "Missing remapped GT directory for triplets: ${REMAPPED_GT_DIR}"
   [[ -d "${PRED_DIR}" ]] || die "Missing prediction directory for triplets: ${PRED_DIR}"
+  if [[ "${CLEAN_OUTPUTS}" -eq 1 ]]; then
+    log "Cleaning triplet PNG outputs before step 4"
+    clean_pngs "${TRIPLET_DIR}"
+  fi
   log "Step 4/4: Generate triplet PNGs (limit=${TRIPLET_LIMIT}) -> ${TRIPLET_DIR}"
+  log "Triplet selection: --id-source pred (strict; errors on missing RGB/GT)"
   "${VENV_PYTHON}" "${ROOT_DIR}/landcover_verification/compare_landcover_triplets.py" \
     --images-dir "${TILED_RGB_DIR}" \
     --gt-dir "${REMAPPED_GT_DIR}" \
     --pred-dir "${PRED_DIR}" \
     --output-dir "${TRIPLET_DIR}" \
-    --limit "${TRIPLET_LIMIT}"
+    --limit "${TRIPLET_LIMIT}" \
+    --id-source pred
 else
   log "Step 4/4: Skip triplet generation (--skip-triplets)"
 fi
